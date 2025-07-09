@@ -1,60 +1,60 @@
-# Skip Intro Addon
+# 跳过片头插件
 
-The Skip Intro Addon for Kodi intelligently detects, remembers, and skips TV show intros using multiple detection methods and a smart database system.
+Kodi 的 Skip Intro Addon 可通过多种检测方法和智能数据库系统智能检测、记忆和跳过电视节目的开场白。
 
-## Features
+## 特点
 
-- **Smart Show Detection**
+- **智能显示检测**
 
-  - Automatically identifies TV shows and episodes
-  - Works with both Kodi metadata and filename parsing
-  - Supports common naming formats (SxxExx, xxXxx)
+  - 自动识别电视节目和剧集
+  - 支持 Kodi 元数据和文件名解析
+  - 支持常见的命名格式（SxxExx、xxXxx）
 
-- **Intro/Outro Management**
+- **简介/外展管理**
 
-  - Saves intro/outro times for each episode
-  - Reuses saved times for future playback
-  - Multiple detection methods:
-    - Database of saved times
-    - Chapter markers
-    - Configurable default timing
-    - Online API support (coming soon)
+- 保存每一集的开场白/片尾曲时间
+  - 重复使用保存的时间，以便将来播放
+  - 多种检测方法：
+    - 保存时间数据库
+    - 章节标记
+    - 可配置的默认时间
+    - 支持在线应用程序接口（即将推出）
 
-- **User-Friendly Interface**
+- **用户友好界面**
 
-  - Clean, focused skip button in bottom right
-  - Auto-focused for immediate skipping
-  - Works with remote control, keyboard, and mouse
-  - Smooth fade in/out animations
-  - Non-intrusive design
+　- 右下方的跳过按钮干净利落、重点突出
+  - 自动聚焦，可立即跳过
+  - 可与遥控器、键盘和鼠标配合使用
+  - 平滑的淡入/淡出动画
+  - 非侵入式设计
 
-- **Technical Features**
-  - Efficient time tracking using native Kodi events
-  - SQLite database for efficient storage
-  - Smart duration parsing (HH:MM:SS, MM:SS)
-  - Comprehensive error handling
-  - Detailed logging
-  - Full localization support
+- **技术特点**
+  - 使用本地 Kodi 事件高效追踪时间
+  - 用于高效存储的 SQLite 数据库
+  - 智能持续时间解析（HH:MM:SS、MM:SS）
+  - 全面的错误处理
+  - 详细日志记录
+  - 完全本地化支持
 
-## Installation
+## 安装
 
-1. **Download the Addon:**
+1. **下载插件：**
 
-   - Go to the [Releases](https://github.com/amgadabdelhafez/plugin.video.skipintro/releases) section
-   - Download the latest release zip file
+   - 前往 [Releases](https://github.com/amgadabdelhafez/plugin.video.skipintro/releases) 部分
+   - 下载最新版本的 zip 文件
 
-2. **Install in Kodi:**
+2. **在 Kodi 中安装：**
 
-   - Open Kodi > Add-ons
-   - Click the "Package" icon (top-left)
-   - Select "Install from zip file"
-   - Navigate to the downloaded zip file
-   - Wait for installation confirmation
+   - 打开 Kodi > 插件
+   - 点击 “软件包”图标（左上角）
+   - 选择 “从压缩文件安装”
+   - 导航至下载的压缩文件
+   - 等待安装确认
 
-3. **Enable the Addon:**
-   - Go to Settings > Add-ons
-   - Find "Skip Intro" under Video Add-ons
-   - Enable the addon
+3. **启用插件：**
+   - 转到设置 > 附加组件
+   - 在视频插件下找到“跳过介绍”
+   - 启用插件
 
 ## Configuration
 
