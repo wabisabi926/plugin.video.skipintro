@@ -226,7 +226,7 @@ if __name__ == '__main__':
                         countdown_remaining -= dt
                     
                     if not countdown_window:
-                        countdown_window = SkipCountdownWindow("notification_overlay.xml", ADDON_PATH)
+                        countdown_window = SkipCountdownWindow("resources/notification_overlay.xml", ADDON_PATH)
                         countdown_thread = threading.Thread(target=countdown_window.doModal)
                         countdown_thread.start()
                     
