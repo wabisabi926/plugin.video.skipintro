@@ -1,0 +1,30 @@
+<addon id="plugin.video.skipintro"
+       name="Skip Intro"
+       version="1.1.0"
+       provider-name="wabisabi926">
+
+    <requires>
+        <import addon="xbmc.python" version="3.0.0" />
+    </requires>
+
+    <!-- 注册 default.py 为脚本模块，以便 RunScript 调用 -->
+    <extension point="xbmc.python.script" library="default.py">
+        <provides>executable</provides>
+    </extension>
+
+    <!-- 注册后台服务，用于自动跳过片头 -->
+    <extension point="xbmc.service" library="service.py" />
+
+    <!-- 元数据 -->
+    <extension point="xbmc.addon.metadata">
+        <summary>Skip intro/outro for TV shows</summary>
+        <description>Automatically skip intro and outro for TV shows</description>
+        <platform>all</platform>
+        <assets>
+            <icon>icon.png</icon>
+            <fanart>resources/filter.jpg</fanart>
+            <screenshot>resources/filter.jpg</screenshot>
+        </assets>
+    </extension>
+
+</addon>
