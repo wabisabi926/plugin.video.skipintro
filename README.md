@@ -16,13 +16,6 @@
 **示例：绑定启动筛选页面 (v12红色键) 及跳过功能 (v12蓝色键)**
 ```xml
 <keymap>
-  <Global>
-    <keyboard>
-      <!-- 芝杜V12红色键 (ID 61952): 启动筛选页面 -->
-      <key id="61952">RunScript(plugin.video.filteredmovies, 0, ?mode=launch_t9)</key>
-    </keyboard>
-  </Global>
-  <!-- FullscreenVideo: 全屏播放视频时生效 (无菜单遮挡) -->
   <FullscreenVideo>
     <keyboard>
       <!-- 蓝色键短按: 记录片头或片尾的时间点 -->
