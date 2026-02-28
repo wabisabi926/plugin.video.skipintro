@@ -8,7 +8,7 @@
 
 ### 1. 绑定到遥控器按键 (Keymap)
     * 方法1：使用按键映射魔改版插件就行按键映射。地址： https://github.com/wabisabi926/script.keymap
-    * 方法2：手动编辑 `userdata/keymaps/gen.xml` (或新建)，将功能绑定到特定按键。
+    * 方法2：手动编辑 `userdata/keymaps/gen.xml` (或新建)，将功能绑定到想要映射的按键。
     
   示例：
 ```xml
