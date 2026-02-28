@@ -14,9 +14,9 @@
 <keymap>
   <FullscreenVideo>
     <keyboard>
-      <!-- 蓝色键短按: 记录片头或片尾的时间点 -->
+      <!-- 想要映射的按键短按: 记录片头或片尾的时间点 -->
       <key id="61514">RunScript(plugin.video.skipintro, ?mode=record_skip_point)</key>
-      <!-- 蓝色键长按: 删除片头或片尾的时间点 -->
+      <!-- 想要映射的按键长按: 删除片头或片尾的时间点 -->
       <key id="61514" mod="longpress">RunScript(plugin.video.skipintro, ?mode=delete_skip_point)</key>
     </keyboard>
 </keymap>
