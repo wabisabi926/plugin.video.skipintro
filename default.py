@@ -40,7 +40,7 @@ def get_current_tvshow_info():
             "jsonrpc": "2.0",
             "method": "Player.GetItem",
             "params": {
-                "properties": ["tvshowid", "showtitle", "season"],
+                "properties": ["tvshowid", "showtitle", "season", "file"],
                 "playerid": 1
             },
             "id": 1
@@ -53,17 +53,36 @@ def get_current_tvshow_info():
             tvshow_id = item.get('tvshowid')
             show_title = item.get('showtitle')
             season = item.get('season', -1)
+            file_path = item.get('file')
             
             if tvshow_id and tvshow_id != -1 and show_title:
-                return str(tvshow_id), show_title, str(season)
+                return str(tvshow_id), show_title, str(season), None
+            elif file_path:
+                import os
+                from urllib.parse import urlparse
+                
+                # 处理网络协议路径
+                parsed = urlparse(file_path)
+                if parsed.scheme:
+                    # 网络协议路径 (webdav, smb, etc.)
+                    path = parsed.path
+                    folder_path = os.path.dirname(path)
+                    # 重建完整的网络路径
+                    folder_path = f"{parsed.scheme}://{parsed.netloc}{folder_path}"
+                    folder_name = os.path.basename(folder_path)
+                else:
+                    # 本地文件路径
+                    folder_path = os.path.dirname(file_path)
+                    folder_name = os.path.basename(folder_path)
+                return folder_path, folder_name, "1", "folder"
     except Exception as e:
         log(f"Error getting TV show info: {e}")
-    return None, None, None
+    return None, None, None, None
 
 def record_skip_point():
-    tvshow_id, show_title, season = get_current_tvshow_info()
+    tvshow_id, show_title, season, folder_type = get_current_tvshow_info()
     if not tvshow_id:
-        xbmc.executebuiltin(f'Notification(Skip Intro, 跳过不适用于非剧集, 2000, {os.path.join(ADDON_PATH, "icon.png")})')
+        xbmc.executebuiltin(f'Notification(Skip Intro, 跳过不适用于非媒体文件, 2000, {os.path.join(ADDON_PATH, "icon.png")})')
         return
 
     try:
@@ -112,7 +131,10 @@ def record_skip_point():
         
         xbmcgui.Window(10000).setProperty("MFG.Reload", "true")
         
-        xbmc.executebuiltin(f'Notification(Skip Intro, {msg} (第{season}季), 2000, {os.path.join(ADDON_PATH, "icon.png")})')
+        if folder_type == "folder":
+            xbmc.executebuiltin(f'Notification(Skip Intro, {msg} (文件夹: {show_title}), 2000, {os.path.join(ADDON_PATH, "icon.png")})')
+        else:
+            xbmc.executebuiltin(f'Notification(Skip Intro, {msg} (第{season}季), 2000, {os.path.join(ADDON_PATH, "icon.png")})')
         log(f"Recorded skip point for {show_title} Season {season}: {season_data}")
         
     except Exception as e:
@@ -120,9 +142,9 @@ def record_skip_point():
         xbmc.executebuiltin(f'Notification(Skip Intro, 无法记录请查阅日志, 2000, {os.path.join(ADDON_PATH, "icon.png")})')
 
 def delete_skip_point():
-    tvshow_id, show_title, season = get_current_tvshow_info()
+    tvshow_id, show_title, season, folder_type = get_current_tvshow_info()
     if not tvshow_id:
-        xbmc.executebuiltin(f'Notification(Skip Intro, 跳过不适用于非剧集, 2000, {os.path.join(ADDON_PATH, "icon.png")})')
+        xbmc.executebuiltin(f'Notification(Skip Intro, 跳过不适用于非媒体文件, 2000, {os.path.join(ADDON_PATH, "icon.png")})')
         return
 
     try:
