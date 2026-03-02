@@ -10,7 +10,7 @@
     * 方法1：使用 按键映射魔改版 插件进行按键映射。
       按键映射魔改版 地址： https://github.com/wabisabi926/script.keymap
       
-    * 方法2：手动编辑 `userdata/keymaps/gen.xml` (或新建)，将功能绑定到想要映射的按键。
+    * 方法2：新建或编辑（如无） `userdata/keymaps/gen.xml` 文件，将插件功能绑定到想要映射的按键。
     
   示例：
 ```xml
