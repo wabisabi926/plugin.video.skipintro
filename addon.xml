@@ -1,23 +1,15 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="plugin.video.skipintro"
-       name="Skip Intro"
-       version="1.1.2"
-       provider-name="wabisabi926">
-
-    <!-- 依赖声明：Python 3 核心依赖 -->
+<addon id="plugin.video.skipintro" name="Skip Intro" version="1.1.2" provider-name="wabisabi926">
     <requires>
         <import addon="xbmc.python" version="3.0.0"/>
     </requires>
 
-    <!-- 可执行脚本扩展：支持 RunScript 调用 default.py -->
     <extension point="xbmc.python.script" library="default.py">
         <provides>executable</provides>
     </extension>
 
-    <!-- 后台服务扩展：自动运行 service.py 实现片头跳过 -->
     <extension point="xbmc.service" library="service.py" start="login"/>
 
-    <!-- 插件元数据（多语言+资源+平台） -->
     <extension point="xbmc.addon.metadata">
         <summary lang="en">Skip intro/outro for TV shows</summary>
         <summary lang="zh">跳过电视剧片头/片尾</summary>
@@ -29,14 +21,12 @@
         <disclaimer lang="zh">仅供个人使用</disclaimer>
         
         <platform>all</platform>
-        <license>GPL-2.0</license>
-        <language>en,zh</language>
+        <license>Creative Commons Non Commercial 3.0 License</license>
+        <source>https://github.com/wabisabi926/plugin.video.skipintro</source>
         
-        <!-- 插件资源文件（标准路径规范） -->
         <assets>
             <icon>icon.png</icon>
             <fanart>fanart.jpg</fanart>
         </assets>
     </extension>
-
 </addon>
