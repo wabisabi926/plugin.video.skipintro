@@ -1,6 +1,6 @@
 <addon id="plugin.video.skipintro"
        name="Skip Intro"
-       version="1.1.1"
+       version="1.1.2"
        provider-name="wabisabi926">
 
     <requires>
