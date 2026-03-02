@@ -1,29 +1,32 @@
-<addon id="plugin.video.skipintro"
-       name="Skip Intro"
-       version="1.2.0"
-       provider-name="wabisabi926">
-
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="plugin.video.skipintro" name="Skip Intro" version="1.2.0-beta" provider-name="wabisabi926">
     <requires>
-        <import addon="xbmc.python" version="3.0.0" />
+        <import addon="xbmc.python" version="3.0.0"/>
     </requires>
 
-    <!-- 注册 default.py 为脚本模块，以便 RunScript 调用 -->
     <extension point="xbmc.python.script" library="default.py">
         <provides>executable</provides>
     </extension>
 
-    <!-- 注册后台服务，用于自动跳过片头 -->
-    <extension point="xbmc.service" library="service.py" />
+    <extension point="xbmc.service" library="service.py" start="login"/>
 
-    <!-- 元数据 -->
     <extension point="xbmc.addon.metadata">
-        <summary>Skip intro/outro for TV shows</summary>
-        <description>Automatically skip intro and outro for TV shows</description>
+        <summary lang="en">Skip intro/outro for TV shows</summary>
+        <summary lang="zh">跳过电视剧片头/片尾</summary>
+        
+        <description lang="en">Manual marking of skip times to automatically skip TV show intros and outros</description>
+        <description lang="zh">手动标记跳过时间点，自动跳过电视剧片头和片尾</description>
+        
+        <disclaimer lang="en">For personal use only</disclaimer>
+        <disclaimer lang="zh">仅供个人使用</disclaimer>
+        
         <platform>all</platform>
+        <license>Creative Commons Non Commercial 3.0 License</license>
+        <source>https://github.com/wabisabi926/plugin.video.skipintro</source>
+        
         <assets>
             <icon>icon.png</icon>
-            <fanart>resources/fanart.jpg</fanart>
+            <fanart>fanart.jpg</fanart>
         </assets>
     </extension>
-
 </addon>
