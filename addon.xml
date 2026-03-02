@@ -17,8 +17,10 @@
 
     <!-- 元数据 -->
     <extension point="xbmc.addon.metadata">
-        <summary>Skip intro/outro for TV shows</summary>
-        <description>Automatically skip intro and outro for TV shows</description>
+        <summary lang="en">Skip intro/outro for TV shows</summary>
+        <summary lang="zh">自动跳过电视剧片头/片尾</summary>
+        <description lang="en">Automatically skip intro and outro for TV shows</description>
+        <description lang="zh">自动检测并跳过电视剧的片头和片尾</description>
         <platform>all</platform>
         <assets>
             <icon>icon.png</icon>
