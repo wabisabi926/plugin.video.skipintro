@@ -1,21 +1,22 @@
 # -*- coding: utf-8 -*-
+from common import notification, log, ADDON_ID, ADDON_PATH, ADDON_DATA_PATH
 import sys
 import urllib.parse
 import json
-import os
-
 import xbmc
 import xbmcgui
 import xbmcvfs
+import os
 
-ADDON_PATH = xbmcvfs.translatePath("special://home/addons/plugin.video.skipintro/")
-ADDON_DATA_PATH = xbmcvfs.translatePath("special://profile/addon_data/plugin.video.skipintro/")
+try:
+    HANDLE = int(sys.argv[1])
+except (IndexError, ValueError):
+    HANDLE = -1
+
 if not os.path.exists(ADDON_DATA_PATH):
     os.makedirs(ADDON_DATA_PATH)
 
 SKIP_DATA_FILE = os.path.join(ADDON_DATA_PATH, 'skip_intro_data.json')
-
-def log(msg): xbmc.log(f"[skipintro] {msg}", xbmc.LOGINFO)
 
 def load_skip_data():
     if not os.path.exists(SKIP_DATA_FILE):
@@ -53,36 +54,30 @@ def get_current_tvshow_info():
             tvshow_id = item.get('tvshowid')
             show_title = item.get('showtitle')
             season = item.get('season', -1)
-            file_path = item.get('file')
             
             if tvshow_id and tvshow_id != -1 and show_title:
-                return str(tvshow_id), show_title, str(season), None
-            elif file_path:
-                import os
-                from urllib.parse import urlparse
+                return str(tvshow_id), show_title, str(season)
+
+            file_path = item.get('file')
+            if file_path:
+                if file_path.startswith("plugin://") or file_path.startswith("pvr://"):
+                    return None, None, None
+                    
+                parent_dir = os.path.dirname(file_path)
+                dir_name = os.path.basename(parent_dir)
                 
-                # 处理网络协议路径
-                parsed = urlparse(file_path)
-                if parsed.scheme:
-                    # 网络协议路径 (webdav, smb, etc.)
-                    path = parsed.path
-                    folder_path = os.path.dirname(path)
-                    # 重建完整的网络路径
-                    folder_path = f"{parsed.scheme}://{parsed.netloc}{folder_path}"
-                    folder_name = os.path.basename(folder_path)
-                else:
-                    # 本地文件路径
-                    folder_path = os.path.dirname(file_path)
-                    folder_name = os.path.basename(folder_path)
-                return folder_path, folder_name, "1", "folder"
+                if not dir_name:
+                    dir_name = "Unknown Folder"
+                
+                return f"directory:{parent_dir}", dir_name, "1"
     except Exception as e:
         log(f"Error getting TV show info: {e}")
-    return None, None, None, None
+    return None, None, None
 
 def record_skip_point():
-    tvshow_id, show_title, season, folder_type = get_current_tvshow_info()
+    tvshow_id, show_title, season = get_current_tvshow_info()
     if not tvshow_id:
-        xbmc.executebuiltin(f'Notification(Skip Intro, 跳过不适用于非媒体文件, 2000, {os.path.join(ADDON_PATH, "icon.png")})')
+        notification("无法识别剧集或文件夹信息", sound=True)
         return
 
     try:
@@ -123,7 +118,7 @@ def record_skip_point():
             m, s = divmod(int(outro_duration), 60)
             msg = f"已记录片尾时长: {m:02d}:{s:02d}"
         else:
-            xbmc.executebuiltin(f'Notification(Skip Intro, "请在剧集前或后20%时间段内调用", 2000, {os.path.join(ADDON_PATH, "icon.png")})')
+            notification("请在剧集前或后20%时间段内调用", sound=True)
             return
 
         data[tvshow_id]["seasons"][season] = season_data
@@ -131,20 +126,17 @@ def record_skip_point():
         
         xbmcgui.Window(10000).setProperty("MFG.Reload", "true")
         
-        if folder_type == "folder":
-            xbmc.executebuiltin(f'Notification(Skip Intro, {msg} (文件夹: {show_title}), 2000, {os.path.join(ADDON_PATH, "icon.png")})')
-        else:
-            xbmc.executebuiltin(f'Notification(Skip Intro, {msg} (第{season}季), 2000, {os.path.join(ADDON_PATH, "icon.png")})')
+        notification(f"{msg} (第{season}季)")
         log(f"Recorded skip point for {show_title} Season {season}: {season_data}")
         
     except Exception as e:
         log(f"Error recording skip point: {e}")
-        xbmc.executebuiltin(f'Notification(Skip Intro, 无法记录请查阅日志, 2000, {os.path.join(ADDON_PATH, "icon.png")})')
+        notification("无法记录请查阅日志", sound=True)
 
 def delete_skip_point():
-    tvshow_id, show_title, season, folder_type = get_current_tvshow_info()
+    tvshow_id, show_title, season = get_current_tvshow_info()
     if not tvshow_id:
-        xbmc.executebuiltin(f'Notification(Skip Intro, 跳过不适用于非媒体文件, 2000, {os.path.join(ADDON_PATH, "icon.png")})')
+        notification("无法识别剧集或文件夹信息", sound=True)
         return
 
     try:
@@ -159,7 +151,7 @@ def delete_skip_point():
         data = load_skip_data()
         
         if tvshow_id not in data or "seasons" not in data[tvshow_id] or season not in data[tvshow_id]["seasons"]:
-            xbmc.executebuiltin(f'Notification(Skip Intro, 无片头片尾标记点, 2000, {os.path.join(ADDON_PATH, "icon.png")})')
+            notification("无片头片尾标记点", sound=True)
             return
 
         season_data = data[tvshow_id]["seasons"][season]
@@ -180,7 +172,7 @@ def delete_skip_point():
             else:
                 msg = "当前无片尾记录"
         else:
-            xbmc.executebuiltin(f'Notification(Skip Intro, 删除失败 请在剧集前或后20%时间段内调用, 2000, {os.path.join(ADDON_PATH, "icon.png")})')
+            notification("删除失败 请在剧集前或后20%时间段内调用", sound=True)
             return
 
         if not season_data:
@@ -194,11 +186,11 @@ def delete_skip_point():
         save_skip_data(data)
         
         xbmcgui.Window(10000).setProperty("MFG.Reload", "true")
-        xbmc.executebuiltin(f'Notification(Skip Intro, {msg}, 2000, {os.path.join(ADDON_PATH, "icon.png")})')
+        notification(msg)
         
     except Exception as e:
         log(f"Error deleting skip point: {e}")
-        xbmc.executebuiltin(f'Notification(Skip Intro, 删除错误, 2000, {os.path.join(ADDON_PATH, "icon.png")})')
+        notification("删除错误", sound=True)
 
 def router(paramstring):
     log(f"Router called with: {paramstring}")
@@ -216,8 +208,11 @@ def router(paramstring):
         delete_skip_point()
         return
 
+
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
+    if HANDLE != -1 and len(sys.argv) > 2:
+        router(sys.argv[2])
+    elif len(sys.argv) > 1:
         router(sys.argv[1])
     else:
         router("")
