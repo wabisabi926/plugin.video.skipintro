@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from common import notification,log,ADDON_ID,ADDON_PATH,ADDON_DATA_PATH
 import xbmc
 import xbmcgui
 import xbmcvfs
@@ -8,16 +9,10 @@ import time
 import traceback
 import threading
 
-ADDON_ID = 'plugin.video.skipintro'
-ADDON_PATH = xbmcvfs.translatePath(f"special://home/addons/{ADDON_ID}/")
-ADDON_DATA_PATH = xbmcvfs.translatePath(f"special://profile/addon_data/{ADDON_ID}/")
 if not os.path.exists(ADDON_DATA_PATH):
     os.makedirs(ADDON_DATA_PATH)
 
 SKIP_DATA_FILE = os.path.join(ADDON_DATA_PATH, 'skip_intro_data.json')
-
-def log(msg):
-    xbmc.log(f"[SkipIntroService] {msg}", xbmc.LOGINFO)
 
 def load_skip_data():
     if not os.path.exists(SKIP_DATA_FILE):
@@ -48,31 +43,25 @@ def get_current_tvshow_info():
             tvshow_id = item.get('tvshowid')
             show_title = item.get('showtitle')
             season = item.get('season', -1)
-            file_path = item.get('file')
             
             if tvshow_id and tvshow_id != -1:
-                return str(tvshow_id), show_title, str(season), None
-            elif file_path:
-                import os
-                from urllib.parse import urlparse
+                return str(tvshow_id), show_title, str(season)
+            
+            file_path = item.get('file')
+            if file_path:
+                if file_path.startswith("plugin://") or file_path.startswith("pvr://"):
+                    return None, None, None
+                    
+                parent_dir = os.path.dirname(file_path)
+                dir_name = os.path.basename(parent_dir)
                 
-                # 处理网络协议路径
-                parsed = urlparse(file_path)
-                if parsed.scheme:
-                    # 网络协议路径 (webdav, smb, etc.)
-                    path = parsed.path
-                    folder_path = os.path.dirname(path)
-                    # 重建完整的网络路径
-                    folder_path = f"{parsed.scheme}://{parsed.netloc}{folder_path}"
-                    folder_name = os.path.basename(folder_path)
-                else:
-                    # 本地文件路径
-                    folder_path = os.path.dirname(file_path)
-                    folder_name = os.path.basename(folder_path)
-                return folder_path, folder_name, "1", "folder"
+                if not dir_name:
+                    dir_name = "Unknown Folder"
+                
+                return f"directory:{parent_dir}", dir_name, "1"
     except Exception as e:
         log(f"Error getting TV show info: {e}")
-    return None, None, None, None
+    return None, None, None
 
 class PlayerMonitor(xbmc.Player):
     def __init__(self):
@@ -97,7 +86,7 @@ class PlayerMonitor(xbmc.Player):
         if not self.isPlayingVideo():
             return
 
-        tvshow_id, show_title, season, folder_type = get_current_tvshow_info()
+        tvshow_id, show_title, season = get_current_tvshow_info()
         if not tvshow_id: return
 
         data = load_skip_data()
@@ -113,10 +102,7 @@ class PlayerMonitor(xbmc.Player):
                         total_time = self.getTotalTime()
                         if total_time > 0:
                             self.current_outro_time = total_time - outro_duration
-                            if folder_type == "folder":
-                                log(f"Outro skip set for folder {show_title}. Duration: {outro_duration}, Trigger at: {self.current_outro_time}")
-                            else:
-                                log(f"Outro skip set for {show_title} S{season}. Duration: {outro_duration}, Trigger at: {self.current_outro_time}")
+                            log(f"Outro skip set for {show_title} S{season}. Duration: {outro_duration}, Trigger at: {self.current_outro_time}")
                     except Exception as e:
                         log(f"Error calculating outro trigger: {e}")
 
@@ -124,7 +110,7 @@ class PlayerMonitor(xbmc.Player):
         if not self.isPlayingVideo():
             return
 
-        tvshow_id, show_title, season, folder_type = get_current_tvshow_info()
+        tvshow_id, show_title, season = get_current_tvshow_info()
         if not tvshow_id:
             return
 
@@ -148,12 +134,9 @@ class PlayerMonitor(xbmc.Player):
             try:
                 current_time = self.getTime()
                 if current_time < skip_time:
-                    if folder_type == "folder":
-                        log(f"Auto skipping intro for folder {show_title}. Current: {current_time}, Target: {skip_time}")
-                    else:
-                        log(f"Auto skipping intro for {show_title} S{season}. Current: {current_time}, Target: {skip_time}")
+                    log(f"Auto skipping intro for {show_title} S{season}. Current: {current_time}, Target: {skip_time}")
                     self.seekTime(skip_time)
-                    xbmc.executebuiltin(f'Notification(Skip Intro, 自动跳过片头 已跳转至 {int(skip_time)}秒, 2000, {os.path.join(ADDON_PATH, "icon.png")})')
+                    notification(f"自动跳过片头 已跳转至 {int(skip_time)}秒")
             except Exception as e:
                 log(f"Error during skip: {e}")
 
@@ -251,7 +234,7 @@ if __name__ == '__main__':
                         countdown_remaining -= dt
                     
                     if not countdown_window:
-                        countdown_window = SkipCountdownWindow("resources/notification_overlay.xml", ADDON_PATH)
+                        countdown_window = SkipCountdownWindow(os.path.join(ADDON_PATH, "resources", "notification_overlay.xml"), ADDON_PATH)
                         countdown_thread = threading.Thread(target=countdown_window.doModal)
                         countdown_thread.start()
                     
@@ -260,7 +243,7 @@ if __name__ == '__main__':
                     
                     if countdown_window.cancelled:
                         player.cancel_skip = True
-                        xbmc.executebuiltin(f'Notification(Skip Intro, 自动跳过片尾 已取消, 1000, {os.path.join(ADDON_PATH, "icon.png")})')
+                        notification("自动跳过片头 已取消")
                         if countdown_thread and countdown_thread.is_alive():
                             countdown_thread.join()
                         countdown_window = None
@@ -271,7 +254,7 @@ if __name__ == '__main__':
                     if countdown_remaining <= 0:
                         player.outro_triggered = True
                         log("Countdown finished. Auto skipping outro -> Next episode")
-                        
+                        notification("自动跳过片尾")
                         if countdown_window:
                             countdown_window.close()
                             if countdown_thread and countdown_thread.is_alive():
@@ -279,7 +262,25 @@ if __name__ == '__main__':
                             countdown_window = None
                             countdown_thread = None
                             
-                        xbmc.executebuiltin("PlayerControl(Next)")
+                        # 尝试使用JSON-RPC API来实现跳到下一集，这比PlayerControl更可靠
+                        try:
+                            json_query = {
+                                "jsonrpc": "2.0",
+                                "method": "Player.GoTo",
+                                "params": {
+                                    "playerid": 1,
+                                    "to": "next"
+                                },
+                                "id": 1
+                            }
+                            log(f"Executing JSON-RPC to go to next episode: {json.dumps(json_query)}")
+                            xbmc.executeJSONRPC(json.dumps(json_query))
+                        except Exception as e:
+                            log(f"Error executing JSON-RPC: {e}")
+                            # 如果JSON-RPC失败，尝试使用PlayerControl
+                            log("Falling back to PlayerControl(Next)")
+                            xbmc.executebuiltin("PlayerControl(Next)")
+                        
                         countdown_active = False
 
             except Exception as e:
