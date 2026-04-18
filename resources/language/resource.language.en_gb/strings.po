@@ -1,0 +1,39 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: plugin.video.skipintro\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-04-18 20:44+0800\n"
+"PO-Revision-Date: 2026-04-18 20:44+0800\n"
+"Last-Translator: wabisabi926\n"
+"Language-Team: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Generator: Poedit 3.4.2\n"
+"Language: en_GB\n"
+
+#: service.py
+msgctxt "#32000"
+msgid "Auto skip intro - Jumped to %d seconds"
+msgstr ""
+
+#: service.py
+msgctxt "#32001"
+msgid "About to play next episode..."
+msgstr ""
+
+#: service.py
+msgctxt "#32002"
+msgid "About to play next episode - Cancelled"
+msgstr ""
+
+#: service.py
+msgctxt "#32003"
+msgid "About to play next episode... %d seconds (Press "Back" to cancel)"
+msgstr ""
+
+#: default.py
+msgctxt "#32004"
+msgid "Skip not available for non-episodes"
+msgstr ""
