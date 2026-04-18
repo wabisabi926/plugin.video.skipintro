@@ -13,7 +13,6 @@
     <extension point="xbmc.addon.metadata">
         <summary lang="en">Skip intro/outro for TV shows</summary>
         <summary lang="zh">跳过电视剧片头/片尾</summary>
-        
         <description lang="en">
  Manually mark skip timestamps to automatically skip opening and closing credits of TV shows.
  - Prerequisite: Settings - Player - Play next video automatically (enable "TV shows, Episodes").
