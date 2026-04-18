@@ -13,24 +13,23 @@
     <extension point="xbmc.addon.metadata">
         <summary lang="en">Skip intro/outro for TV shows</summary>
         <summary lang="zh">跳过电视剧片头/片尾</summary>
-        <description lang="en">Manually mark skip timestamps to automatically skip opening and closing credits of TV shows. 
-  - Prerequisite: Settings - Player - Play next video automatically (enable "TV shows, Episodes"). 
-  - Modded script.keymap add-on is suggested to map two functions: 
-  "Record current time as skip point (opening/closing credits)" and "Delete skip records of current episode". 
-  Map both functions to a single button: short press to record, long press to delete. 
-  </description>
-        <description lang="zh">手动标记跳过时间点，自动跳过电视剧片头和片尾。 
-              - 使用前提：设置-播放器-自动播放下一个视频（勾选"电视剧，剧集"） 
-              - 建议使用按键映射魔改版插件映射"记录当前时间为跳过点 (片头/片尾)"和"删除当前剧集的跳过点记录"两个功能。建议用映射到同一个按键，短按为"记录"，长按为"删除"。 
-  </description>
-        
+        <description lang="en">
+            Manually mark skip timestamps to automatically skip opening and closing credits of TV shows.
+            - Prerequisite: Settings - Player - Play next video automatically (enable "TV shows, Episodes").
+            - Modded script.keymap add-on is suggested to map two functions:
+            "Record current time as skip point (opening/closing credits)" and "Delete skip records of current episode".
+            Map both functions to a single button: short press to record, long press to delete.
+        </description>
+        <description lang="zh">
+            手动标记跳过时间点，自动跳过电视剧片头和片尾。
+            - 使用前提：设置-播放器-自动播放下一个视频（勾选"电视剧，剧集"）
+            - 建议使用按键映射魔改版插件映射"记录当前时间为跳过点 (片头/片尾)"和"删除当前剧集的跳过点记录"两个功能。建议用映射到同一个按键，短按为"记录"，长按为"删除"。
+        </description>
         <disclaimer lang="en">For personal use only</disclaimer>
         <disclaimer lang="zh">仅供个人使用</disclaimer>
-        
         <platform>all</platform>
         <license>Creative Commons Non Commercial 3.0 License</license>
         <source>https://github.com/wabisabi926/plugin.video.skipintro</source>
-        
         <assets>
             <icon>icon.png</icon>
             <fanart>fanart.jpg</fanart>
