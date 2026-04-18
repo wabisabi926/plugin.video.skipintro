@@ -6,14 +6,14 @@
 
 ## 使用办法
 1. 前提：设置-播放器-自动播放下一个（勾选"电视剧，剧集"）
-2. 安装按键映射魔改版 地址： `https://github.com/wabisabi926/script.keymap`
+2. 安装按键映射魔改版 地址： [https://github.com/wabisabi926/script.keymap](https://github.com/wabisabi926/script.keymap)
 3. 用按键映射魔改版映射"记录当前时间为跳过点 (片头/片尾)"和"删除当前剧集的跳过点记录"两个功能。建议用映射到同一个按键，短按为"记录"，长按为"删除"。
 
 ## 使用示例
 
 ### 1. 绑定到遥控器按键 (Keymap)
 - 方法1：使用 按键映射魔改版 插件进行按键映射。
-  按键映射魔改版 地址： https://github.com/wabisabi926/script.keymap
+  按键映射魔改版 地址： [https://github.com/wabisabi926/script.keymap](https://github.com/wabisabi926/script.keymap)
   
 - 方法2：手动编辑 `userdata/keymaps/gen.xml` (或新建)，将功能绑定到想要映射的按键。
   
