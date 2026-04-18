@@ -315,23 +315,9 @@ if __name__ == '__main__':
                             countdown_thread = None
                             
                         try:
-                            # Try PlayerControl(Next) first
+                            # Use PlayerControl(Next) to play next episode
                             xbmc.executebuiltin("PlayerControl(Next)")
                             log("PlayerControl(Next) executed successfully")
-                            
-                            # Wait a bit and try JSONRPC as backup
-                            xbmc.sleep(500)
-                            json_query = {
-                                "jsonrpc": "2.0",
-                                "method": "Player.GoTo",
-                                "params": {
-                                    "playerid": 1,
-                                    "to": "next"
-                                },
-                                "id": 1
-                            }
-                            json_response = xbmc.executeJSONRPC(json.dumps(json_query))
-                            log(f"JSONRPC Player.GoTo response: {json_response}")
                         except Exception as e:
                             log(f"Error executing PlayerControl(Next): {e}")
                         countdown_active = False
