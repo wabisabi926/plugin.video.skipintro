@@ -30,8 +30,8 @@ msgstr "即将播放下一集 已取消"
 
 #: service.py
 msgctxt "#32003"
-msgid "About to play next episode... %d seconds (Press "Back" to cancel)"
-msgstr "即将播放下一集... %d 秒 (按"返回"取消)"
+msgid "About to play next episode... Press \"Back\" within %d seconds to cancel"
+msgstr "即将播放下一集... %d 秒内按\"返回键\"可取消"
 
 #: default.py
 msgctxt "#32004"

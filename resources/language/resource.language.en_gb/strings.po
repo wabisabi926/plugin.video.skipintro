@@ -30,7 +30,7 @@ msgstr ""
 
 #: service.py
 msgctxt "#32003"
-msgid "About to play next episode... %d seconds (Press "Back" to cancel)"
+msgid "About to play next episode... Press \"Back\" within %d seconds to cancel"
 msgstr ""
 
 #: default.py
