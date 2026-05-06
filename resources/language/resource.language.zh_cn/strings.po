@@ -3,7 +3,7 @@ msgstr ""
 "Project-Id-Version: plugin.video.skipintro\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-04-18 20:44+0800\n"
-"PO-Revision-Date: 2026-04-18 20:44+0800\n"
+"PO-Revision-Date: 2026-05-06 20:44+0800\n"
 "Last-Translator: wabisabi926\n"
 "Language-Team: \n"
 "MIME-Version: 1.0\n"
@@ -20,20 +20,80 @@ msgstr "自动跳过片头 已跳转至 %d 秒"
 
 #: service.py
 msgctxt "#32001"
-msgid "About to play next episode..."
+msgid "Playing next episode..."
 msgstr "即将播放下一集..."
 
 #: service.py
 msgctxt "#32002"
-msgid "Auto play next episode - Cancelled"
+msgid "Play next episode cancelled"
 msgstr "即将播放下一集 已取消"
 
 #: service.py
 msgctxt "#32003"
-msgid "About to play next episode... Press \"Back\" within %d seconds to cancel"
+msgid "Playing next episode... Press \"Back\" within %d seconds to cancel"
 msgstr "即将播放下一集... %d 秒内按\"返回键\"可取消"
 
 #: default.py
 msgctxt "#32004"
 msgid "Skip not available for non-episodes"
 msgstr "跳过不适用于非剧集"
+
+#: default.py
+msgctxt "#32005"
+msgid "Intro recorded: %02d:%02d"
+msgstr "已记录片头: %02d:%02d"
+
+#: default.py
+msgctxt "#32006"
+msgid "Outro duration recorded: %02d:%02d"
+msgstr "已记录片尾时长: %02d:%02d"
+
+#: default.py
+msgctxt "#32007"
+msgid "Please call within first or last 20% of the episode"
+msgstr "请在剧集前或后 20% 时间段内调用"
+
+#: default.py
+msgctxt "#32008"
+msgid "%s (Season %s)"
+msgstr "%s (第 %s 季)"
+
+#: default.py
+msgctxt "#32009"
+msgid "Recording failed, please check logs"
+msgstr "无法记录请查阅日志"
+
+#: default.py
+msgctxt "#32010"
+msgid "No intro/outro markers"
+msgstr "无片头片尾标记点"
+
+#: default.py
+msgctxt "#32011"
+msgid "Intro record deleted"
+msgstr "已删除片头记录"
+
+#: default.py
+msgctxt "#32012"
+msgid "No intro record"
+msgstr "当前无片头记录"
+
+#: default.py
+msgctxt "#32013"
+msgid "Outro record deleted"
+msgstr "已删除片尾记录"
+
+#: default.py
+msgctxt "#32014"
+msgid "No outro record"
+msgstr "当前无片尾记录"
+
+#: default.py
+msgctxt "#32015"
+msgid "Delete failed - Please call within first or last 20% of the episode"
+msgstr "删除失败 请在剧集前或后 20% 时间段内调用"
+
+#: default.py
+msgctxt "#32016"
+msgid "Delete error"
+msgstr "删除错误"

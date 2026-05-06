@@ -3,7 +3,7 @@ msgstr ""
 "Project-Id-Version: plugin.video.skipintro\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-04-18 20:44+0800\n"
-"PO-Revision-Date: 2026-04-18 20:44+0800\n"
+"PO-Revision-Date: 2026-05-06 20:44+0800\n"
 "Last-Translator: wabisabi926\n"
 "Language-Team: \n"
 "MIME-Version: 1.0\n"
@@ -20,20 +20,80 @@ msgstr ""
 
 #: service.py
 msgctxt "#32001"
-msgid "About to play next episode..."
+msgid "Playing next episode..."
 msgstr ""
 
 #: service.py
 msgctxt "#32002"
-msgid "About to play next episode - Cancelled"
+msgid "Play next episode cancelled"
 msgstr ""
 
 #: service.py
 msgctxt "#32003"
-msgid "About to play next episode... Press \"Back\" within %d seconds to cancel"
+msgid "Playing next episode... Press \"Back\" within %d seconds to cancel"
 msgstr ""
 
 #: default.py
 msgctxt "#32004"
 msgid "Skip not available for non-episodes"
+msgstr ""
+
+#: default.py
+msgctxt "#32005"
+msgid "Intro recorded: %02d:%02d"
+msgstr ""
+
+#: default.py
+msgctxt "#32006"
+msgid "Outro duration recorded: %02d:%02d"
+msgstr ""
+
+#: default.py
+msgctxt "#32007"
+msgid "Please call within first or last 20% of the episode"
+msgstr ""
+
+#: default.py
+msgctxt "#32008"
+msgid "%s (Season %s)"
+msgstr ""
+
+#: default.py
+msgctxt "#32009"
+msgid "Recording failed, please check logs"
+msgstr ""
+
+#: default.py
+msgctxt "#32010"
+msgid "No intro/outro markers"
+msgstr ""
+
+#: default.py
+msgctxt "#32011"
+msgid "Intro record deleted"
+msgstr ""
+
+#: default.py
+msgctxt "#32012"
+msgid "No intro record"
+msgstr ""
+
+#: default.py
+msgctxt "#32013"
+msgid "Outro record deleted"
+msgstr ""
+
+#: default.py
+msgctxt "#32014"
+msgid "No outro record"
+msgstr ""
+
+#: default.py
+msgctxt "#32015"
+msgid "Delete failed - Please call within first or last 20% of the episode"
+msgstr ""
+
+#: default.py
+msgctxt "#32016"
+msgid "Delete error"
 msgstr ""

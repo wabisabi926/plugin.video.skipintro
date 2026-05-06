@@ -1,66 +1,12 @@
 # -*- coding: utf-8 -*-
 import sys
 import urllib.parse
-import json
 import os
 
 import xbmc
 import xbmcgui
-import xbmcvfs
-import xbmcaddon
 
-ADDON = xbmcaddon.Addon()
-ADDON_PATH = xbmcvfs.translatePath("special://home/addons/plugin.video.skipintro/")
-ADDON_DATA_PATH = xbmcvfs.translatePath("special://profile/addon_data/plugin.video.skipintro/")
-if not os.path.exists(ADDON_DATA_PATH):
-    os.makedirs(ADDON_DATA_PATH)
-
-SKIP_DATA_FILE = os.path.join(ADDON_DATA_PATH, 'skip_intro_data.json')
-
-def log(msg): xbmc.log(f"[skipintro] {msg}", xbmc.LOGINFO)
-
-def load_skip_data():
-    if not os.path.exists(SKIP_DATA_FILE):
-        return {}
-    try:
-        with open(SKIP_DATA_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except Exception as e:
-        log(f"Error loading skip data: {e}")
-        return {}
-
-def save_skip_data(data):
-    try:
-        with open(SKIP_DATA_FILE, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=4)
-    except Exception as e:
-        log(f"Error saving skip data: {e}")
-
-def get_current_tvshow_info():
-    try:
-        json_query = {
-            "jsonrpc": "2.0",
-            "method": "Player.GetItem",
-            "params": {
-                "properties": ["tvshowid", "showtitle", "season"],
-                "playerid": 1
-            },
-            "id": 1
-        }
-        json_response = xbmc.executeJSONRPC(json.dumps(json_query))
-        response = json.loads(json_response)
-        
-        if 'result' in response and 'item' in response['result']:
-            item = response['result']['item']
-            tvshow_id = item.get('tvshowid')
-            show_title = item.get('showtitle')
-            season = item.get('season', -1)
-            
-            if tvshow_id and tvshow_id != -1 and show_title:
-                return str(tvshow_id), show_title, str(season)
-    except Exception as e:
-        log(f"Error getting TV show info: {e}")
-    return None, None, None
+from common import ADDON, ADDON_PATH, load_skip_data, save_skip_data, get_current_tvshow_info, log
 
 def record_skip_point():
     tvshow_id, show_title, season = get_current_tvshow_info()
@@ -99,14 +45,14 @@ def record_skip_point():
         if percentage < 20:
             season_data["intro"] = current_time
             m, s = divmod(int(current_time), 60)
-            msg = f"已记录片头: {m:02d}:{s:02d}"
+            msg = ADDON.getLocalizedString(32005) % (m, s)
         elif percentage > 80:
             outro_duration = total_time - current_time
             season_data["outro"] = outro_duration
             m, s = divmod(int(outro_duration), 60)
-            msg = f"已记录片尾时长: {m:02d}:{s:02d}"
+            msg = ADDON.getLocalizedString(32006) % (m, s)
         else:
-            xbmc.executebuiltin(f'Notification(Skip Intro, "请在剧集前或后20%时间段内调用", 2000, {os.path.join(ADDON_PATH, "icon.png")})')
+            xbmc.executebuiltin(f'Notification(Skip Intro, {ADDON.getLocalizedString(32007)}, 2000, {os.path.join(ADDON_PATH, "icon.png")})')
             return
 
         data[tvshow_id]["seasons"][season] = season_data
@@ -114,12 +60,13 @@ def record_skip_point():
         
         xbmcgui.Window(10000).setProperty("MFG.Reload", "true")
         
-        xbmc.executebuiltin(f'Notification(Skip Intro, {msg} (第{season}季), 2000, {os.path.join(ADDON_PATH, "icon.png")})')
+        full_msg = ADDON.getLocalizedString(32008) % (msg, season)
+        xbmc.executebuiltin(f'Notification(Skip Intro, {full_msg}, 2000, {os.path.join(ADDON_PATH, "icon.png")})')
         log(f"Recorded skip point for {show_title} Season {season}: {season_data}")
         
     except Exception as e:
         log(f"Error recording skip point: {e}")
-        xbmc.executebuiltin(f'Notification(Skip Intro, 无法记录请查阅日志, 2000, {os.path.join(ADDON_PATH, "icon.png")})')
+        xbmc.executebuiltin(f'Notification(Skip Intro, {ADDON.getLocalizedString(32009)}, 2000, {os.path.join(ADDON_PATH, "icon.png")})')
 
 def delete_skip_point():
     tvshow_id, show_title, season = get_current_tvshow_info()
@@ -139,7 +86,7 @@ def delete_skip_point():
         data = load_skip_data()
         
         if tvshow_id not in data or "seasons" not in data[tvshow_id] or season not in data[tvshow_id]["seasons"]:
-            xbmc.executebuiltin(f'Notification(Skip Intro, 无片头片尾标记点, 2000, {os.path.join(ADDON_PATH, "icon.png")})')
+            xbmc.executebuiltin(f'Notification(Skip Intro, {ADDON.getLocalizedString(32010)}, 2000, {os.path.join(ADDON_PATH, "icon.png")})')
             return
 
         season_data = data[tvshow_id]["seasons"][season]
@@ -150,17 +97,17 @@ def delete_skip_point():
         if percentage < 20:
             if "intro" in season_data:
                 del season_data["intro"]
-                msg = "已删除片头记录"
+                msg = ADDON.getLocalizedString(32011)
             else:
-                msg = "当前无片头记录"
+                msg = ADDON.getLocalizedString(32012)
         elif percentage > 80:
             if "outro" in season_data:
                 del season_data["outro"]
-                msg = "已删除片尾记录"
+                msg = ADDON.getLocalizedString(32013)
             else:
-                msg = "当前无片尾记录"
+                msg = ADDON.getLocalizedString(32014)
         else:
-            xbmc.executebuiltin(f'Notification(Skip Intro, 删除失败 请在剧集前或后20%时间段内调用, 2000, {os.path.join(ADDON_PATH, "icon.png")})')
+            xbmc.executebuiltin(f'Notification(Skip Intro, {ADDON.getLocalizedString(32015)}, 2000, {os.path.join(ADDON_PATH, "icon.png")})')
             return
 
         if not season_data:
@@ -178,7 +125,7 @@ def delete_skip_point():
         
     except Exception as e:
         log(f"Error deleting skip point: {e}")
-        xbmc.executebuiltin(f'Notification(Skip Intro, 删除错误, 2000, {os.path.join(ADDON_PATH, "icon.png")})')
+        xbmc.executebuiltin(f'Notification(Skip Intro, {ADDON.getLocalizedString(32016)}, 2000, {os.path.join(ADDON_PATH, "icon.png")})')
 
 def router(paramstring):
     log(f"Router called with: {paramstring}")

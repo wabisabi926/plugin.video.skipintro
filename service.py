@@ -1,61 +1,11 @@
 # -*- coding: utf-8 -*-
 import xbmc
 import xbmcgui
-import xbmcvfs
-import json
-import os
 import time
 import traceback
 import threading
-import xbmcaddon
 
-ADDON_ID = 'plugin.video.skipintro'
-ADDON = xbmcaddon.Addon(ADDON_ID)
-ADDON_PATH = xbmcvfs.translatePath(f"special://home/addons/{ADDON_ID}/")
-ADDON_DATA_PATH = xbmcvfs.translatePath(f"special://profile/addon_data/{ADDON_ID}/")
-if not os.path.exists(ADDON_DATA_PATH):
-    os.makedirs(ADDON_DATA_PATH)
-
-SKIP_DATA_FILE = os.path.join(ADDON_DATA_PATH, 'skip_intro_data.json')
-
-def log(msg):
-    xbmc.log(f"[SkipIntroService] {msg}", xbmc.LOGINFO)
-
-def load_skip_data():
-    if not os.path.exists(SKIP_DATA_FILE):
-        return {}
-    try:
-        with open(SKIP_DATA_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except Exception as e:
-        log(f"Error loading skip data: {e}")
-        return {}
-
-def get_current_tvshow_info():
-    try:
-        json_query = {
-            "jsonrpc": "2.0",
-            "method": "Player.GetItem",
-            "params": {
-                "properties": ["tvshowid", "showtitle", "season"],
-                "playerid": 1
-            },
-            "id": 1
-        }
-        json_response = xbmc.executeJSONRPC(json.dumps(json_query))
-        response = json.loads(json_response)
-        
-        if 'result' in response and 'item' in response['result']:
-            item = response['result']['item']
-            tvshow_id = item.get('tvshowid')
-            show_title = item.get('showtitle')
-            season = item.get('season', -1)
-            
-            if tvshow_id and tvshow_id != -1:
-                return str(tvshow_id), show_title, str(season)
-    except Exception as e:
-        log(f"Error getting TV show info: {e}")
-    return None, None, None
+from common import ADDON, ADDON_PATH, load_skip_data, get_current_tvshow_info, log
 
 class PlayerMonitor(xbmc.Player):
     def __init__(self):
@@ -66,19 +16,19 @@ class PlayerMonitor(xbmc.Player):
         self.cancel_skip = False
         self._playback_started = False
 
-    def onAVStarted(self):
-        log("onAVStarted triggered")
-        self._playback_started = True
-        self.check_intro()
-        self.retry_update_outro()
-
-    def onPlayBackStarted(self):
-        log("onPlayBackStarted triggered")
+    def _handle_playback_start(self):
+        log("Playback started")
         self._playback_started = True
         if not self.isPlayingVideo():
             return
         self.check_intro()
         self.retry_update_outro()
+
+    def onAVStarted(self):
+        self._handle_playback_start()
+
+    def onPlayBackStarted(self):
+        self._handle_playback_start()
 
     def onPlayBackEnded(self):
         log("onPlayBackEnded triggered")
@@ -105,11 +55,6 @@ class PlayerMonitor(xbmc.Player):
         log("retry_update_outro: failed to get totalTime after max retries")
 
     def update_outro_info(self):
-        self.current_outro_time = None
-        self.outro_triggered = False
-        self.outro_countdown_start = None
-        self.cancel_skip = False
-
         if not self.isPlayingVideo():
             log("update_outro_info: not playing video")
             return
@@ -136,12 +81,21 @@ class PlayerMonitor(xbmc.Player):
                 try:
                     total_time = self.getTotalTime()
                     if total_time > 0:
-                        self.current_outro_time = total_time - outro_duration
+                        new_outro_time = total_time - outro_duration
+                        if self.current_outro_time != new_outro_time:
+                            self.current_outro_time = new_outro_time
+                            self.outro_triggered = False
+                            self.outro_countdown_start = None
+                            self.cancel_skip = False
                         log(f"update_outro_info: outro skip set for {show_title} S{season}. Duration: {outro_duration}, Trigger at: {self.current_outro_time}")
                     else:
                         log(f"update_outro_info: total_time is {total_time}, retrying later")
                 except Exception as e:
                     log(f"Error calculating outro trigger: {e}")
+            else:
+                if self.current_outro_time is not None:
+                    self.current_outro_time = None
+                    self.outro_triggered = False
         else:
             log(f"update_outro_info: s_data is not dict: {s_data}")
 
@@ -219,7 +173,17 @@ class SkipCountdownWindow(xbmcgui.WindowXMLDialog):
         except:
             pass
 
+def cleanup_countdown(countdown_window, countdown_thread):
+    if countdown_window:
+        countdown_window.close()
+        if countdown_thread and countdown_thread.is_alive():
+            countdown_thread.join()
+        countdown_window = None
+        countdown_thread = None
+    return countdown_window, countdown_thread
+
 if __name__ == '__main__':
+    import os
     log("Service started")
     
     monitor = xbmc.Monitor()
@@ -259,11 +223,7 @@ if __name__ == '__main__':
                         countdown_active = False
                         log("Playback time before outro range. Resetting countdown.")
                     
-                    if countdown_window:
-                        countdown_window.close()
-                        if countdown_thread: countdown_thread.join()
-                        countdown_window = None
-                        countdown_thread = None
+                    countdown_window, countdown_thread = cleanup_countdown(countdown_window, countdown_thread)
 
                 elif not player.outro_triggered and not player.cancel_skip:
                     if not countdown_active:
@@ -293,10 +253,7 @@ if __name__ == '__main__':
                             if countdown_window.cancelled:
                                 player.cancel_skip = True
                                 xbmc.executebuiltin(f'Notification(Skip Intro, {ADDON.getLocalizedString(32002)}, 3000, {os.path.join(ADDON_PATH, "icon.png")})')
-                                if countdown_thread and countdown_thread.is_alive():
-                                    countdown_thread.join()
-                                countdown_window = None
-                                countdown_thread = None
+                                countdown_window, countdown_thread = cleanup_countdown(countdown_window, countdown_thread)
                                 countdown_active = False
                                 continue
                         except Exception as e:
@@ -307,15 +264,9 @@ if __name__ == '__main__':
                         log("Countdown finished. Auto skipping outro -> Next episode")
                         log(f"Executing PlayerControl(Next) - current time: {current_time:.1f}, trigger time: {trigger_time:.1f}")
                         
-                        if countdown_window:
-                            countdown_window.close()
-                            if countdown_thread and countdown_thread.is_alive():
-                                countdown_thread.join()
-                            countdown_window = None
-                            countdown_thread = None
-                            
+                        countdown_window, countdown_thread = cleanup_countdown(countdown_window, countdown_thread)
+                        
                         try:
-                            # Use PlayerControl(Next) to play next episode
                             xbmc.executebuiltin("PlayerControl(Next)")
                             log("PlayerControl(Next) executed successfully")
                         except Exception as e:
@@ -325,16 +276,10 @@ if __name__ == '__main__':
             except Exception as e:
                 log(f"Error checking outro: {e}")
                 log(traceback.format_exc())
-                if countdown_window:
-                    countdown_window.close()
-                    countdown_window = None
+                countdown_window, countdown_thread = cleanup_countdown(countdown_window, countdown_thread)
                 countdown_active = False
         else:
-            if countdown_window:
-                countdown_window.close()
-                if countdown_thread: countdown_thread.join()
-                countdown_window = None
-                countdown_thread = None
+            countdown_window, countdown_thread = cleanup_countdown(countdown_window, countdown_thread)
             countdown_active = False
         
         if monitor.waitForAbort(0.3):
