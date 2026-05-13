@@ -20,8 +20,8 @@ msgstr "自动跳过片头 已跳转至 %d 秒"
 
 #: service.py
 msgctxt "#32001"
-msgid "About to play next episode..."
-msgstr "即将播放下一集..."
+msgid "About to finish playing"
+msgstr "即将播放完毕..."
 
 #: service.py
 msgctxt "#32002"
