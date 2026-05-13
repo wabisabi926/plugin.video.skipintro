@@ -20,7 +20,7 @@ msgstr ""
 
 #: service.py
 msgctxt "#32001"
-msgid "About to play next episode..."
+msgid "About to finish playing"
 msgstr ""
 
 #: service.py
