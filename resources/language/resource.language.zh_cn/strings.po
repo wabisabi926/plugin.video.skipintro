@@ -1,0 +1,174 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: plugin.video.skipintro\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-04-18 20:44+0800\n"
+"PO-Revision-Date: 2026-05-06 20:44+0800\n"
+"Last-Translator: wabisabi926\n"
+"Language-Team: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Generator: Poedit 3.4.2\n"
+"Language: zh_CN\n"
+
+#: service.py
+msgctxt "#32000"
+msgid "Intro Skipped - Now playing S%02dE%02d"
+msgstr "已跳过片头 - 正在播放 S%02dE%02d"
+
+#: service.py
+msgctxt "#32001"
+msgid "About to finish playing"
+msgstr "即将播放完毕 S%02dE%02d"
+
+#: service.py
+msgctxt "#32002"
+msgid "Play next episode cancelled"
+msgstr "即将播放下一集 已取消"
+
+#: service.py
+msgctxt "#32003"
+msgid "Playing next episode... Press \"Back\" within %d seconds to cancel"
+msgstr "即将播放下一集... %d 秒内按\"返回键\"可取消"
+
+#: default.py
+msgctxt "#32004"
+msgid "Skip not available for non-episodes"
+msgstr "跳过不适用于非剧集"
+
+#: default.py
+msgctxt "#32005"
+msgid "Intro recorded: %02d:%02d"
+msgstr "已记录片头: %02d:%02d"
+
+#: default.py
+msgctxt "#32006"
+msgid "Outro duration recorded: %02d:%02d"
+msgstr "已记录片尾时长: %02d:%02d"
+
+#: default.py
+msgctxt "#32007"
+msgid "Please call within first or last 20% of the episode"
+msgstr "请在剧集前或后 20% 时间段内调用"
+
+#: default.py
+msgctxt "#32008"
+msgid "%s (Season %s)"
+msgstr "%s (第 %s 季)"
+
+#: default.py
+msgctxt "#32009"
+msgid "Recording failed, please check logs"
+msgstr "无法记录请查阅日志"
+
+#: default.py
+msgctxt "#32010"
+msgid "No intro/outro markers"
+msgstr "无片头片尾标记点"
+
+#: default.py
+msgctxt "#32011"
+msgid "Intro record deleted"
+msgstr "已删除片头记录"
+
+#: default.py
+msgctxt "#32012"
+msgid "No intro record"
+msgstr "当前无片头记录"
+
+#: default.py
+msgctxt "#32013"
+msgid "Outro record deleted"
+msgstr "已删除片尾记录"
+
+#: default.py
+msgctxt "#32014"
+msgid "No outro record"
+msgstr "当前无片尾记录"
+
+#: default.py
+msgctxt "#32015"
+msgid "Delete failed - Please call within first or last 20% of the episode"
+msgstr "删除失败 请在剧集前或后 20% 时间段内调用"
+
+#: default.py
+msgctxt "#32016"
+msgid "Delete error"
+msgstr "删除错误"
+
+#: settings.xml
+msgctxt "#32019"
+msgid "Playlist Settings"
+msgstr "播放列表设置"
+
+#: settings.xml
+msgctxt "#32017"
+msgid "Auto fill playlist on play"
+msgstr "播放时自动补全播放列表"
+
+#: settings.xml
+msgctxt "#32018"
+msgid "Automatically fill the playlist with episodes from the same season when playing a TV show episode."
+msgstr "播放电视剧集时，自动将同季剧集添加到播放列表中。"
+
+#: settings.xml
+msgctxt "#32030"
+msgid "General"
+msgstr "常规"
+
+#: settings.xml
+msgctxt "#32031"
+msgid "Logging"
+msgstr "日志"
+
+#: default.py
+msgctxt "#32020"
+msgid "Failed to add setting, please enable it manually"
+msgstr "自动添加设置失败，请手动开启"
+
+#: default.py
+msgctxt "#32021"
+msgid "Uncategorized"
+msgstr "未分类"
+
+#: default.py
+msgctxt "#32022"
+msgid "TV Shows"
+msgstr "电视剧"
+
+#: default.py
+msgctxt "#32023"
+msgid "Skip intro/outro requires Settings > Player > Auto play next ({0}).\nDo you want to add this setting and exit, then manually replay?"
+msgstr "跳过片头/片尾需要打开设置-播放器-自动播放下一集({0})。\n是否自动添加该设置并退出，然后手动重新播放？"
+
+#: default.py
+msgctxt "#32024"
+msgid "Auto play next not enabled"
+msgstr "自动播放下一集未开启"
+
+#: default.py
+msgctxt "#32025"
+msgid "OK"
+msgstr "确定"
+
+#: default.py
+msgctxt "#32026"
+msgid "Cancel"
+msgstr "取消"
+
+#: default.py, service.py
+msgctxt "#32027"
+msgid "Skip Intro"
+msgstr "跳过片头片尾"
+
+#: settings.xml
+msgctxt "#32028"
+msgid "Enable debug logging"
+msgstr "启用调试日志"
+
+#: settings.xml
+msgctxt "#32029"
+msgid "Enable detailed debug logging for troubleshooting."
+msgstr "启用详细的调试日志记录，用于故障排除。"

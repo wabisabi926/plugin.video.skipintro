@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<settings>
+    <category label="32030">
+        <setting id="autofill_playlist_on_play" type="bool" label="32017" description="32018" default="false"/>
+    </category>
+    <category label="32031">
+        <setting id="debug_mode" type="bool" label="32028" description="32029" default="false"/>
+    </category>
+</settings>
