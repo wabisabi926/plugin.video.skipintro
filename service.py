@@ -337,127 +337,65 @@ def safe_get_state_value(state, key, default=None):
 
 
 def execute_next_episode(countdown_state):
-    countdown_state["window"], countdown_state["thread"] = cleanup_countdown(
-        countdown_state["window"], countdown_state["thread"]
-    )
+    cleanup_countdown(countdown_state["window"], countdown_state["thread"])
+    countdown_state["window"], countdown_state["thread"] = None, None
     
     shared_state = State()
-    success = False
+    
+    def try_play_next():
+        shared_state.set_playing_next(True)
+        xbmc.executebuiltin("PlayerControl(Next)")
     
     try:
-        log("=" * 60)
-        log("execute_next_episode: starting")
-        
         state = get_active_video_playlist_state()
-        log(f"execute_next_episode: playlist state = {state}")
         
         if state:
             playlist_position = safe_get_state_value(state, "position")
             playlist_id = safe_get_state_value(state, "playlistid")
-            has_next_in_playlist = is_next_episode_available_in_playlist(playlist_id, playlist_position)
-            log(f"execute_next_episode: has_next_in_playlist = {has_next_in_playlist}")
-            
-            if has_next_in_playlist:
-                log("execute_next_episode: [1/3] Using playlist mode - PlayerControl(Next)")
-                shared_state.set_playing_next(True)
-                xbmc.executebuiltin("PlayerControl(Next)")
-                log("execute_next_episode: [SUCCESS] PlayerControl(Next) executed")
-                success = True
+            if is_next_episode_available_in_playlist(playlist_id, playlist_position):
+                try_play_next()
                 countdown_state["active"] = False
                 return
-            else:
-                log("execute_next_episode: no next in playlist, trying library mode")
         
         tvshow_id, show_title, season, source_type = get_current_tvshow_info()
-        log(f"execute_next_episode: tvshow_id={tvshow_id}, show_title={show_title}, season={season}, source_type={source_type}")
         
         if source_type == 'library' and tvshow_id and str(tvshow_id) != '-1':
-            log("execute_next_episode: [2/3] Using library mode")
-            current_file = ""
-            current_episode_num = None
-            current_season_num = None
+            current_file = safe_get_state_value(state, "file", "") if state else ""
+            current_episode_num = safe_get_state_value(state, "episode") if state else None
+            current_season_num = safe_get_state_value(state, "season") if state else None
             
-            if state:
-                current_file = safe_get_state_value(state, "file", "")
-                current_episode_num = safe_get_state_value(state, "episode")
-                current_season_num = safe_get_state_value(state, "season")
-                log(f"execute_next_episode: current_episode={current_episode_num}, current_season={current_season_num}")
+            next_episode = get_next_episode_from_library(
+                tvshow_id, current_file,
+                include_watched=True,
+                current_episode_num=current_episode_num,
+                current_season_num=current_season_num
+            )
             
-            log(f"execute_next_episode: searching for next episode of {show_title}")
-            
-            if current_episode_num is not None and current_season_num is not None:
-                log(f"execute_next_episode: searching by S{current_season_num}E{current_episode_num}")
-                next_episode = get_next_episode_from_library(
-                    tvshow_id, current_file, 
-                    include_watched=True,
-                    current_episode_num=current_episode_num,
-                    current_season_num=current_season_num
-                )
-            else:
-                log("execute_next_episode: searching by file match")
-                next_episode = get_next_episode_from_library(
-                    tvshow_id, current_file, 
-                    include_watched=True
-                )
-            
-            log(f"execute_next_episode: next_episode found = {next_episode is not None}")
-            
-            if next_episode:
-                log(f"execute_next_episode: found S{next_episode.get('season')}E{next_episode.get('episode')} - {next_episode.get('title')}")
+            if next_episode and play_episode_from_library(next_episode):
                 shared_state.set_playing_next(True)
-                if play_episode_from_library(next_episode):
-                    log("execute_next_episode: [SUCCESS] play_episode_from_library executed")
-                    success = True
-                    countdown_state["active"] = False
-                    return
-                else:
-                    log("execute_next_episode: play_episode_from_library failed")
-                    shared_state.set_playing_next(False)
-            else:
-                log("execute_next_episode: no next episode found in library")
-        else:
-            log("execute_next_episode: not a library source, skipping library mode")
-
+                countdown_state["active"] = False
+                return
+        
         if source_type == "directory" and state:
             current_file = state.get("file", "")
             next_file = get_next_file_in_directory(current_file)
             if next_file:
-                log(f"execute_next_episode: [2.5/3] Using directory mode - Player.Open next file: {next_file}")
                 shared_state.set_playing_next(True)
                 stop_playback_and_wait(timeout_ms=5000, interval_ms=200)
                 xbmc.sleep(800)
                 if play_file(next_file):
-                    log("execute_next_episode: [SUCCESS] play_file executed")
-                    success = True
                     countdown_state["active"] = False
                     return
-                shared_state.set_playing_next(False)
         
-        log("execute_next_episode: [3/3] Falling back to PlayerControl(Next)")
-        shared_state.set_playing_next(True)
-        xbmc.executebuiltin("PlayerControl(Next)")
-        log("execute_next_episode: [SUCCESS] PlayerControl(Next) executed (fallback)")
-        success = True
+        try_play_next()
         
-    except Exception as e:
-        log("=" * 60)
-        log(f"execute_next_episode: [ERROR] {e}")
-        log(traceback.format_exc())
-        shared_state.set_playing_next(False)
-        
+    except Exception:
         try:
-            log("execute_next_episode: [LAST RESORT] Trying PlayerControl(Next)")
-            shared_state.set_playing_next(True)
-            xbmc.executebuiltin("PlayerControl(Next)")
-            log("execute_next_episode: [SUCCESS] PlayerControl(Next) (last resort)")
-            success = True
-        except Exception as fallback_error:
-            log(f"execute_next_episode: [FATAL] {fallback_error}")
-            shared_state.set_playing_next(False)
+            try_play_next()
+        except Exception:
+            pass
     
     countdown_state["active"] = False
-    log(f"execute_next_episode: complete (success={success})")
-    log("=" * 60)
 
 
 def update_countdown_ui(countdown_state, player):
@@ -492,7 +430,6 @@ if __name__ == '__main__':
         "remaining": 0.0,
     }
     last_tick_time = time.time()
-    last_play_state = None
 
     while not monitor.abortRequested():
         current_tick_time = time.time()
@@ -501,7 +438,6 @@ if __name__ == '__main__':
 
         if xbmcgui.Window(10000).getProperty("MFG.Reload") == "true":
             xbmcgui.Window(10000).clearProperty("MFG.Reload")
-            log("Reload signal received, updating info...")
             player.update_outro_info()
             countdown_state["active"] = False
 
@@ -509,14 +445,10 @@ if __name__ == '__main__':
             try:
                 current_time = player.getTime()
                 trigger_time = player.current_outro_time
-                start_threshold = trigger_time - 6
-                play_state = "before_range"
 
-                if current_time < start_threshold:
+                if current_time < trigger_time - 6:
                     reset_outro_state(countdown_state, player)
-                    play_state = "before_range"
                 elif not player.outro_triggered and not player.cancel_skip:
-                    play_state = "in_countdown"
                     if not countdown_state["active"]:
                         handle_outro_enter(countdown_state)
                     else:
@@ -525,33 +457,17 @@ if __name__ == '__main__':
                         update_countdown_ui(countdown_state, player)
                         if countdown_state["remaining"] <= 0:
                             player.outro_triggered = True
-                            log(f"Countdown finished. Auto skipping outro -> Next episode")
-                            log(f"Executing PlayerControl(Next) - current time: {current_time:.1f}, trigger time: {trigger_time:.1f}")
                             execute_next_episode(countdown_state)
-                            play_state = "triggered"
-                else:
-                    play_state = "waiting_next"
 
-                if play_state != last_play_state:
-                    log(f"Main loop state changed: {last_play_state} -> {play_state}, current={current_time:.1f}")
-                    last_play_state = play_state
-
-            except Exception as e:
-                log(f"Error checking outro: {e}")
-                log(traceback.format_exc())
-                countdown_state["window"], countdown_state["thread"] = cleanup_countdown(
-                    countdown_state["window"], countdown_state["thread"]
-                )
+            except Exception:
+                cleanup_countdown(countdown_state["window"], countdown_state["thread"])
+                countdown_state["window"], countdown_state["thread"] = None, None
                 countdown_state["active"] = False
-                last_play_state = None
         else:
-            countdown_state["window"], countdown_state["thread"] = cleanup_countdown(
-                countdown_state["window"], countdown_state["thread"]
-            )
-            countdown_state["active"] = False
-            if last_play_state is not None:
-                log("Main loop state changed: playing -> idle")
-                last_play_state = None
+            if countdown_state["active"]:
+                cleanup_countdown(countdown_state["window"], countdown_state["thread"])
+                countdown_state["window"], countdown_state["thread"] = None, None
+                countdown_state["active"] = False
 
         if monitor.waitForAbort(0.3):
             break

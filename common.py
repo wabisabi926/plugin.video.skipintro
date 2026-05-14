@@ -288,79 +288,36 @@ def get_season_episodes_from_library(tvshowid, season):
 
 
 def play_episode_from_library(episode_info):
-    try:
-        episodeid = episode_info.get("episodeid")
-        if not episodeid or episodeid == -1:
-            log("play_episode_from_library: invalid episodeid")
-            return False
-        
-        result = jsonrpc_call(
-            "Player.Open",
-            {
-                "item": {
-                    "episodeid": episodeid
-                }
-            }
-        )
-        
-        if result == "OK":
-            log(f"play_episode_from_library: successfully started playing episodeid={episodeid}")
-            return True
-        else:
-            log(f"play_episode_from_library: failed to play episodeid={episodeid}, result={result}")
-            return False
-    except Exception as e:
-        log(f"play_episode_from_library error: {e}")
+    episodeid = episode_info.get("episodeid")
+    if not episodeid or episodeid == -1:
         return False
+    
+    result = jsonrpc_call("Player.Open", {"item": {"episodeid": episodeid}})
+    return result == "OK"
 
 
 def is_next_episode_available_in_playlist(playlist_id=None, playlist_position=None):
-    try:
-        if playlist_id is None or playlist_position is None:
-            state = get_active_video_playlist_state()
-            if not state:
-                return False
-            playlist_id = state.get("playlistid", 1) if playlist_id is None else playlist_id
-            playlist_position = state.get("position", 0) if playlist_position is None else playlist_position
-        
-        playlist_id = int(playlist_id or 1)
-        playlist_position = int(playlist_position or 0)
-        result = jsonrpc_call(
-            "Playlist.GetItems",
-            {
-                "playlistid": playlist_id,
-                "properties": [],
-                "limits": {"start": playlist_position + 1, "end": playlist_position + 2}
-            }
-        ) or {}
-        
-        items = result.get("items") or []
-        has_next = len(items) > 0
-        
-        log(f"is_next_episode_available_in_playlist: playlistid={playlist_id}, position={playlist_position}, has_next={has_next}")
-        return has_next
-    except Exception as e:
-        log(f"is_next_episode_available_in_playlist error: {e}")
-        return False
+    if playlist_id is None or playlist_position is None:
+        state = get_active_video_playlist_state()
+        if not state:
+            return False
+        playlist_id = state.get("playlistid", 1)
+        playlist_position = state.get("position", 0)
+    
+    result = jsonrpc_call(
+        "Playlist.GetItems",
+        {"playlistid": int(playlist_id or 1), "properties": [],
+         "limits": {"start": int(playlist_position or 0) + 1, "end": int(playlist_position or 0) + 2}}
+    ) or {}
+    return len(result.get("items") or []) > 0
 
 
 def play_file(file_path):
     file_path = str(file_path or "")
     if not file_path:
         return False
-    result = jsonrpc_call(
-        "Player.Open",
-        {
-            "item": {
-                "file": file_path,
-            }
-        },
-    )
-    if result == "OK":
-        log(f"play_file: successfully started playing file={file_path}")
-        return True
-    log(f"play_file: failed to play file={file_path}, result={result}")
-    return False
+    result = jsonrpc_call("Player.Open", {"item": {"file": file_path}})
+    return result == "OK"
 
 
 def get_next_file_in_directory(current_file):
