@@ -21,7 +21,7 @@ msgstr "已跳过片头 - 正在播放 S%02dE%02d"
 #: service.py
 msgctxt "#32001"
 msgid "About to finish playing"
-msgstr "即将播放完毕 S%02dE%02d"
+msgstr "即将播放完 S%02dE%02d"
 
 #: service.py
 msgctxt "#32002"
