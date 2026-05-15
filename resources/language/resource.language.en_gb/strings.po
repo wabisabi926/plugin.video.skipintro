@@ -1,0 +1,174 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: plugin.video.skipintro\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-04-18 20:44+0800\n"
+"PO-Revision-Date: 2026-05-06 20:44+0800\n"
+"Last-Translator: wabisabi926\n"
+"Language-Team: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Generator: Poedit 3.4.2\n"
+"Language: en_GB\n"
+
+#: service.py
+msgctxt "#32000"
+msgid "Intro Skipped - Now playing S%02dE%02d"
+msgstr "Intro Skipped - Now playing S%02dE%02d"
+
+#: service.py
+msgctxt "#32001"
+msgid "About to finish playing"
+msgstr "About to finish playing S%02dE%02d"
+
+#: service.py
+msgctxt "#32002"
+msgid "Play next episode cancelled"
+msgstr "Play next episode cancelled"
+
+#: service.py
+msgctxt "#32003"
+msgid "Playing next episode... Press \"Back\" within %d seconds to cancel"
+msgstr "Playing next episode... Press \"Back\" within %d seconds to cancel"
+
+#: default.py
+msgctxt "#32004"
+msgid "Skip not available for non-episodes"
+msgstr "Skip not available for non-episodes"
+
+#: default.py
+msgctxt "#32005"
+msgid "Intro recorded: %02d:%02d"
+msgstr "Intro recorded: %02d:%02d"
+
+#: default.py
+msgctxt "#32006"
+msgid "Outro duration recorded: %02d:%02d"
+msgstr "Outro duration recorded: %02d:%02d"
+
+#: default.py
+msgctxt "#32007"
+msgid "Please call within first or last 20% of the episode"
+msgstr "Please call within first or last 20% of the episode"
+
+#: default.py
+msgctxt "#32008"
+msgid "%s (Season %s)"
+msgstr "%s (Season %s)"
+
+#: default.py
+msgctxt "#32009"
+msgid "Recording failed, please check logs"
+msgstr "Recording failed, please check logs"
+
+#: default.py
+msgctxt "#32010"
+msgid "No intro/outro markers"
+msgstr "No intro/outro markers"
+
+#: default.py
+msgctxt "#32011"
+msgid "Intro record deleted"
+msgstr "Intro record deleted"
+
+#: default.py
+msgctxt "#32012"
+msgid "No intro record"
+msgstr "No intro record"
+
+#: default.py
+msgctxt "#32013"
+msgid "Outro record deleted"
+msgstr "Outro record deleted"
+
+#: default.py
+msgctxt "#32014"
+msgid "No outro record"
+msgstr "No outro record"
+
+#: default.py
+msgctxt "#32015"
+msgid "Delete failed!Please call within first or last 20% of the episode"
+msgstr "Delete failed!Please call within first or last 20% of the episode"
+
+#: default.py
+msgctxt "#32016"
+msgid "Delete error"
+msgstr "Delete error"
+
+#: settings.xml
+msgctxt "#32017"
+msgid "Auto fill playlist on play"
+msgstr "Auto fill playlist on play"
+
+#: settings.xml
+msgctxt "#32018"
+msgid "Automatically fill the playlist with episodes from the same season when playing a TV show episode."
+msgstr "Automatically fill the playlist with episodes from the same season when playing a TV show episode."
+
+#: settings.xml
+msgctxt "#32019"
+msgid "Playlist Settings"
+msgstr "Playlist Settings"
+
+#: default.py
+msgctxt "#32020"
+msgid "Failed to add setting, please enable it manually"
+msgstr "Failed to add setting, please enable it manually"
+
+#: default.py
+msgctxt "#32021"
+msgid "Uncategorized"
+msgstr "Uncategorized"
+
+#: default.py
+msgctxt "#32022"
+msgid "TV Shows"
+msgstr "TV Shows and Episodes"
+
+#: default.py
+msgctxt "#32023"
+msgid "Skip intro/outro requires Settings > Player > Auto play next ({0}).\nDo you want to add this setting and exit, then manually replay?"
+msgstr "Skip intro/outro requires Settings > Player > Auto play next ({0}).\nDo you want to add this setting and exit, then manually replay?"
+
+#: default.py
+msgctxt "#32024"
+msgid "Auto play next not enabled"
+msgstr "Auto play next not enabled"
+
+#: default.py
+msgctxt "#32025"
+msgid "OK"
+msgstr "OK"
+
+#: default.py
+msgctxt "#32026"
+msgid "Cancel"
+msgstr "Cancel"
+
+#: default.py, service.py
+msgctxt "#32027"
+msgid "Skip Intro"
+msgstr "Skip Intro"
+
+#: settings.xml
+msgctxt "#32028"
+msgid "Enable debug logging"
+msgstr "Enable debug logging"
+
+#: settings.xml
+msgctxt "#32029"
+msgid "Enable detailed debug logging for troubleshooting."
+msgstr "Enable detailed debug logging for troubleshooting."
+
+#: settings.xml
+msgctxt "#32030"
+msgid "General"
+msgstr "General"
+
+#: settings.xml
+msgctxt "#32031"
+msgid "Logging"
+msgstr "Logging"

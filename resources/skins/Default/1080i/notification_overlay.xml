@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<window type="dialog">
+    <zorder>3</zorder>
+    <controls>
+        <control type="group">
+            <top>40</top>
+            <right>40</right>
+            <width>580</width>
+            <height>80</height>
+            <control type="image">
+                <left>-80</left>
+                <top>-80</top>
+                <right>-80</right>
+                <bottom>-80</bottom>
+                <texture border="80">overlays/shadow-80.png</texture>
+            </control>
+            <control type="image">
+                <left>0</left>
+                <top>0</top>
+                <width>580</width>
+                <height>80</height>
+                <texture border="20">dialogs/dialog.png</texture>
+                <colordiffuse>E0000000</colordiffuse>
+            </control>
+            <control type="image">
+                <left>0</left>
+                <top>0</top>
+                <width>580</width>
+                <height>80</height>
+                <texture border="20">dialogs/dialog.png</texture>
+                <colordiffuse>30FFFFFF</colordiffuse>
+            </control>
+            <control type="label" id="100">
+                <left>20</left>
+                <top>0</top>
+                <width>540</width>
+                <height>80</height>
+                <align>center</align>
+                <aligny>center</aligny>
+                <font>font25_title</font>
+                <textcolor>white</textcolor>
+                <shadowcolor>FF000000</shadowcolor>
+                <label></label>
+            </control>
+        </control>
+    </controls>
+</window>
