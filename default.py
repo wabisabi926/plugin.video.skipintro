@@ -9,19 +9,67 @@ import xbmcgui
 from common import ADDON, ADDON_PATH, load_skip_data, save_skip_data, get_current_tvshow_info, log, jsonrpc_call
 
 
+def show_notification(message, duration=2000):
+    xbmc.executebuiltin(
+        'Notification(%s, %s, %d, %s)' % (
+            ADDON.getLocalizedString(32027),
+            message,
+            duration,
+            os.path.join(ADDON_PATH, "icon.png")
+        )
+    )
+
+
+def get_current_playback_time():
+    try:
+        player = xbmc.Player()
+        current_time = player.getTime()
+        total_time = player.getTotalTime()
+        return current_time, total_time
+    except Exception:
+        return 0, 0
+
+
+def get_autoplay_settings():
+    result = jsonrpc_call("Settings.GetSettingValue", {"setting": "videoplayer.autoplaynextitem"}) or {}
+    value = result.get("value") if isinstance(result, dict) else None
+
+    current_values = []
+    if isinstance(value, list):
+        for item in value:
+            try:
+                current_values.append(int(item))
+            except (TypeError, ValueError):
+                continue
+    elif isinstance(value, (int, float)):
+        current_values.append(int(value))
+    elif isinstance(value, str):
+        for item in value.split(','):
+            item = item.strip()
+            if item:
+                try:
+                    current_values.append(int(item))
+                except ValueError:
+                    continue
+    return current_values
+
+
+def set_autoplay_settings(values):
+    result = jsonrpc_call(
+        "Settings.SetSettingValue",
+        {"setting": "videoplayer.autoplaynextitem", "value": sorted(set(values))}
+    )
+    return result == "OK"
+
+
 def ensure_autoplay_next_setting(tvshow_id, source_type):
     try:
         if not tvshow_id:
             return
 
-        item_type = ""
-        result = jsonrpc_call(
-            "Player.GetItem",
-            {"playerid": 1},
-        ) or {}
-        if isinstance(result, dict):
-            item = result.get("item") or {}
-            item_type = str(item.get("type") or "").lower()
+        result = jsonrpc_call("Player.GetItem", {"playerid": 1}) or {}
+        item = result.get("item") or {}
+        item_type = str(item.get("type") or "").lower()
 
         if item_type in ("movie", "musicvideo") and source_type != "directory":
             return
@@ -33,32 +81,9 @@ def ensure_autoplay_next_setting(tvshow_id, source_type):
             required_values = [2, 8]
             required_label = ADDON.getLocalizedString(32022)
 
-        current_values = []
-        result = jsonrpc_call(
-            "Settings.GetSettingValue",
-            {"setting": "videoplayer.autoplaynextitem"},
-        ) or {}
-        value = result.get("value") if isinstance(result, dict) else None
-
-        if isinstance(value, list):
-            for item in value:
-                try:
-                    current_values.append(int(item))
-                except (TypeError, ValueError):
-                    continue
-        elif isinstance(value, (int, float)):
-            current_values.append(int(value))
-        elif isinstance(value, str):
-            for item in value.split(','):
-                item = item.strip()
-                if not item:
-                    continue
-                try:
-                    current_values.append(int(item))
-                except ValueError:
-                    continue
-
+        current_values = get_autoplay_settings()
         has_required = any(v in current_values for v in required_values)
+        
         if has_required:
             return
 
@@ -73,22 +98,10 @@ def ensure_autoplay_next_setting(tvshow_id, source_type):
             return
 
         missing_values = [v for v in required_values if v not in current_values]
-        new_values = sorted(set(current_values + missing_values))
-        set_result = jsonrpc_call(
-            "Settings.SetSettingValue",
-            {
-                "setting": "videoplayer.autoplaynextitem",
-                "value": new_values,
-            },
-        )
-        if not set_result:
-            xbmc.executebuiltin(
-                'Notification(%s, %s, 2000, %s)' % (
-                    ADDON.getLocalizedString(32027),
-                    ADDON.getLocalizedString(32020),
-                    os.path.join(ADDON_PATH, "icon.png")
-                )
-            )
+        new_values = current_values + missing_values
+
+        if not set_autoplay_settings(new_values):
+            show_notification(ADDON.getLocalizedString(32020))
             return
 
         try:
@@ -104,186 +117,103 @@ def ensure_autoplay_next_setting(tvshow_id, source_type):
 def record_skip_point():
     tvshow_id, show_title, season, source_type = get_current_tvshow_info()
     if not tvshow_id:
-        xbmc.executebuiltin(
-            'Notification(%s, %s, 2000, %s)' % (
-                ADDON.getLocalizedString(32027),
-                ADDON.getLocalizedString(32004),
-                os.path.join(ADDON_PATH, "icon.png")
-            )
-        )
+        show_notification(ADDON.getLocalizedString(32004))
         return
 
-    try:
-        player = xbmc.Player()
-        current_time = player.getTime()
-        total_time = player.getTotalTime()
+    current_time, total_time = get_current_playback_time()
+    if total_time <= 0:
+        return
 
-        if total_time <= 0:
-            return
+    percentage = (current_time / total_time) * 100
+    data = load_skip_data()
 
-        percentage = (current_time / total_time) * 100
-        data = load_skip_data()
+    if tvshow_id not in data:
+        data[tvshow_id] = {"title": show_title, "seasons": {}}
+    elif "time" in data[tvshow_id]:
+        old_time = data[tvshow_id]["time"]
+        data[tvshow_id] = {"title": show_title, "seasons": {"1": {"intro": old_time}}}
 
-        if tvshow_id not in data:
-            data[tvshow_id] = {"title": show_title, "seasons": {}}
-        elif "time" in data[tvshow_id]:
-            old_time = data[tvshow_id]["time"]
-            data[tvshow_id] = {"title": show_title, "seasons": {"1": {"intro": old_time}}}
-            del data[tvshow_id]["time"]
+    if "seasons" not in data[tvshow_id]:
+        data[tvshow_id]["seasons"] = {}
 
-        if "seasons" not in data[tvshow_id]:
-            data[tvshow_id]["seasons"] = {}
+    data[tvshow_id]["title"] = show_title
 
-        data[tvshow_id]["title"] = show_title
+    raw_season = data[tvshow_id]["seasons"].get(season)
+    season_data = {"intro": raw_season} if isinstance(raw_season, (int, float)) else (raw_season.copy() if isinstance(raw_season, dict) else {})
 
-        raw_season = data[tvshow_id]["seasons"].get(season)
-        if isinstance(raw_season, (int, float)):
-            season_data = {"intro": raw_season}
-        elif isinstance(raw_season, dict):
-            season_data = raw_season
-        else:
-            season_data = {}
+    if percentage < 20:
+        season_data["intro"] = current_time
+        m, s = divmod(int(current_time), 60)
+        msg = ADDON.getLocalizedString(32005) % (m, s)
+    elif percentage > 80:
+        outro_duration = total_time - current_time
+        season_data["outro"] = outro_duration
+        m, s = divmod(int(outro_duration), 60)
+        msg = ADDON.getLocalizedString(32006) % (m, s)
+    else:
+        show_notification(ADDON.getLocalizedString(32007))
+        return
 
-        msg = ""
-        if percentage < 20:
-            season_data["intro"] = current_time
-            m, s = divmod(int(current_time), 60)
-            msg = ADDON.getLocalizedString(32005) % (m, s)
-        elif percentage > 80:
-            outro_duration = total_time - current_time
-            season_data["outro"] = outro_duration
-            m, s = divmod(int(outro_duration), 60)
-            msg = ADDON.getLocalizedString(32006) % (m, s)
-        else:
-            xbmc.executebuiltin(
-                'Notification(%s, %s, 2000, %s)' % (
-                    ADDON.getLocalizedString(32027),
-                    ADDON.getLocalizedString(32007),
-                    os.path.join(ADDON_PATH, "icon.png")
-                )
-            )
-            return
+    data[tvshow_id]["seasons"][season] = season_data
+    save_skip_data(data)
 
-        data[tvshow_id]["seasons"][season] = season_data
-        save_skip_data(data)
+    xbmcgui.Window(10000).setProperty("MFG.Reload", "true")
 
-        xbmcgui.Window(10000).setProperty("MFG.Reload", "true")
+    full_msg = ADDON.getLocalizedString(32008) % (msg, season)
+    show_notification(full_msg)
+    log(f"Recorded skip point for {show_title} Season {season}: {season_data}")
 
-        full_msg = ADDON.getLocalizedString(32008) % (msg, season)
-        xbmc.executebuiltin(
-            'Notification(%s, %s, 2000, %s)' % (
-                ADDON.getLocalizedString(32027),
-                full_msg,
-                os.path.join(ADDON_PATH, "icon.png")
-            )
-        )
-        log(f"Recorded skip point for {show_title} Season {season}: {season_data}")
-
-        ensure_autoplay_next_setting(tvshow_id, source_type)
-
-    except Exception as e:
-        log(f"Error recording skip point: {e}")
-        xbmc.executebuiltin(
-            'Notification(%s, %s, 2000, %s)' % (
-                ADDON.getLocalizedString(32027),
-                ADDON.getLocalizedString(32009),
-                os.path.join(ADDON_PATH, "icon.png")
-            )
-        )
+    ensure_autoplay_next_setting(tvshow_id, source_type)
 
 
 def delete_skip_point():
     tvshow_id, show_title, season, source_type = get_current_tvshow_info()
     if not tvshow_id:
-        xbmc.executebuiltin(
-            'Notification(%s, %s, 2000, %s)' % (
-                ADDON.getLocalizedString(32027),
-                ADDON.getLocalizedString(32004),
-                os.path.join(ADDON_PATH, "icon.png")
-            )
-        )
+        show_notification(ADDON.getLocalizedString(32004))
         return
 
-    try:
-        player = xbmc.Player()
-        current_time = player.getTime()
-        total_time = player.getTotalTime()
+    current_time, total_time = get_current_playback_time()
+    if total_time <= 0:
+        return
 
-        if total_time <= 0:
-            return
+    percentage = (current_time / total_time) * 100
+    data = load_skip_data()
 
-        percentage = (current_time / total_time) * 100
-        data = load_skip_data()
+    if tvshow_id not in data or "seasons" not in data[tvshow_id] or season not in data[tvshow_id]["seasons"]:
+        show_notification(ADDON.getLocalizedString(32010))
+        return
 
-        if tvshow_id not in data or "seasons" not in data[tvshow_id] or season not in data[tvshow_id]["seasons"]:
-            xbmc.executebuiltin(
-                'Notification(%s, %s, 2000, %s)' % (
-                    ADDON.getLocalizedString(32027),
-                    ADDON.getLocalizedString(32010),
-                    os.path.join(ADDON_PATH, "icon.png")
-                )
-            )
-            return
+    raw_season = data[tvshow_id]["seasons"][season]
+    season_data = {"intro": raw_season} if isinstance(raw_season, (int, float)) else (raw_season.copy() if isinstance(raw_season, dict) else {})
 
-        raw_season = data[tvshow_id]["seasons"][season]
-        if isinstance(raw_season, (int, float)):
-            season_data = {"intro": raw_season}
-        elif isinstance(raw_season, dict):
-            season_data = raw_season.copy()
+    if percentage < 20:
+        if "intro" in season_data:
+            del season_data["intro"]
+            msg = ADDON.getLocalizedString(32011)
         else:
-            season_data = {}
-
-        msg = ""
-        if percentage < 20:
-            if "intro" in season_data:
-                del season_data["intro"]
-                msg = ADDON.getLocalizedString(32011)
-            else:
-                msg = ADDON.getLocalizedString(32012)
-        elif percentage > 80:
-            if "outro" in season_data:
-                del season_data["outro"]
-                msg = ADDON.getLocalizedString(32013)
-            else:
-                msg = ADDON.getLocalizedString(32014)
+            msg = ADDON.getLocalizedString(32012)
+    elif percentage > 80:
+        if "outro" in season_data:
+            del season_data["outro"]
+            msg = ADDON.getLocalizedString(32013)
         else:
-            xbmc.executebuiltin(
-                'Notification(%s, %s, 2000, %s)' % (
-                    ADDON.getLocalizedString(32027),
-                    ADDON.getLocalizedString(32015),
-                    os.path.join(ADDON_PATH, "icon.png")
-                )
-            )
-            return
+            msg = ADDON.getLocalizedString(32014)
+    else:
+        show_notification(ADDON.getLocalizedString(32015))
+        return
 
-        if not season_data:
-            del data[tvshow_id]["seasons"][season]
-        else:
-            data[tvshow_id]["seasons"][season] = season_data
+    if not season_data:
+        del data[tvshow_id]["seasons"][season]
+    else:
+        data[tvshow_id]["seasons"][season] = season_data
 
-        if not data[tvshow_id]["seasons"]:
-            del data[tvshow_id]
+    if not data[tvshow_id]["seasons"]:
+        del data[tvshow_id]
 
-        save_skip_data(data)
+    save_skip_data(data)
 
-        xbmcgui.Window(10000).setProperty("MFG.Reload", "true")
-        xbmc.executebuiltin(
-            'Notification(%s, %s, 2000, %s)' % (
-                ADDON.getLocalizedString(32027),
-                msg,
-                os.path.join(ADDON_PATH, "icon.png")
-            )
-        )
-
-    except Exception as e:
-        log(f"Error deleting skip point: {e}")
-        xbmc.executebuiltin(
-            'Notification(%s, %s, 2000, %s)' % (
-                ADDON.getLocalizedString(32027),
-                ADDON.getLocalizedString(32016),
-                os.path.join(ADDON_PATH, "icon.png")
-            )
-        )
+    xbmcgui.Window(10000).setProperty("MFG.Reload", "true")
+    show_notification(msg)
 
 
 def router(paramstring):
@@ -296,15 +226,10 @@ def router(paramstring):
 
     if mode == "record_skip_point":
         record_skip_point()
-        return
-
-    if mode == "delete_skip_point":
+    elif mode == "delete_skip_point":
         delete_skip_point()
-        return
 
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         router(sys.argv[1])
-    else:
-        router("")

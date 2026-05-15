@@ -3,7 +3,6 @@ import os
 import xbmc
 import xbmcgui
 import time
-import traceback
 import threading
 
 from common import (
@@ -14,6 +13,76 @@ from common import (
     get_next_file_in_directory, play_file, extract_media_info_from_filename,
     State, mark_current_episode_as_watched, get_season_episode_from_state
 )
+
+
+def show_notification(title, message, duration=3000):
+    try:
+        xbmc.executebuiltin(
+            'Notification(%s, %s, %d, %s)' % (
+                title, message, duration, os.path.join(ADDON_PATH, "icon.png")
+            )
+        )
+    except Exception as e:
+        log(f"Error showing notification: {e}")
+
+
+class SkipCountdownWindow(xbmcgui.WindowXMLDialog):
+    def __init__(self, *args, **kwargs):
+        xbmcgui.WindowXMLDialog.__init__(self, *args, **kwargs)
+        self.cancelled = False
+        self.is_ready = False
+
+    def onInit(self):
+        self.is_ready = True
+
+    def onAction(self, action):
+        action_id = action.getId()
+        if action_id in [10, 92]:
+            self.cancelled = True
+            self.close()
+        elif action_id in [1, 15]:
+            xbmc.executebuiltin("PlayerControl(SmallSkipBackward)")
+        elif action_id in [2, 14]:
+            xbmc.executebuiltin("PlayerControl(SmallSkipForward)")
+        elif action_id in [3, 20]:
+            xbmc.executebuiltin("PlayerControl(BigSkipForward)")
+        elif action_id in [4, 21]:
+            xbmc.executebuiltin("PlayerControl(BigSkipBackward)")
+        elif action_id == 7:
+            xbmc.executebuiltin("ActivateWindow(VideoOSD)")
+        elif action_id == 77:
+            xbmc.executebuiltin("PlayerControl(Forward)")
+        elif action_id == 78:
+            xbmc.executebuiltin("PlayerControl(Rewind)")
+        elif action_id == 12:
+            xbmc.executebuiltin("PlayerControl(Play)")
+
+    def update_text(self, text):
+        if not self.is_ready:
+            return
+        try:
+            ctrl = self.getControl(100)
+            if ctrl:
+                ctrl.setLabel(text)
+        except Exception as e:
+            log(f"Error updating countdown text: {e}")
+
+
+class CountdownState:
+    def __init__(self):
+        self.window = None
+        self.thread = None
+        self.active = False
+        self.remaining = 0.0
+
+    def cleanup(self):
+        if self.window:
+            self.window.close()
+            if self.thread and self.thread.is_alive():
+                self.thread.join()
+        self.window = None
+        self.thread = None
+        self.active = False
 
 
 class PlayerMonitor(xbmc.Player):
@@ -27,8 +96,7 @@ class PlayerMonitor(xbmc.Player):
         self._state_cache_time = 0
         self._state_cache_ttl = 0.5
 
-    def is_playing(self):
-        """缓存的播放状态检查，减少API调用"""
+    def is_video_playing(self):
         now = time.time()
         if now - self._state_cache_time > self._state_cache_ttl:
             try:
@@ -75,23 +143,19 @@ class PlayerMonitor(xbmc.Player):
         log("retry_update_outro: failed to get totalTime after max retries")
 
     def update_outro_info(self):
-        if not self.is_playing():
-            log("update_outro_info: not playing video")
+        if not self.is_video_playing():
             return
 
         tvshow_id, show_title, season, source_type = get_current_tvshow_info()
         if not tvshow_id:
-            log("update_outro_info: no tvshow_id")
             return
 
         data = load_skip_data()
         if tvshow_id not in data:
-            log(f"update_outro_info: no data for tvshow_id {tvshow_id}")
             return
 
         record = data[tvshow_id]
         if "seasons" not in record or season not in record["seasons"]:
-            log(f"update_outro_info: no season data for S{season}")
             return
 
         s_data = record["seasons"][season]
@@ -106,20 +170,15 @@ class PlayerMonitor(xbmc.Player):
                             self.current_outro_time = new_outro_time
                             self.outro_triggered = False
                             self.cancel_skip = False
-                        log(f"update_outro_info: outro skip set for {show_title} S{season}. Duration: {outro_duration}, Trigger at: {self.current_outro_time}")
-                    else:
-                        log(f"update_outro_info: total_time is {total_time}, retrying later")
                 except Exception as e:
                     log(f"Error calculating outro trigger: {e}")
             else:
                 if self.current_outro_time is not None:
                     self.current_outro_time = None
                     self.outro_triggered = False
-        else:
-            log(f"update_outro_info: s_data is not dict: {s_data}")
 
     def check_intro(self):
-        if not self.is_playing():
+        if not self.is_video_playing():
             return
 
         tvshow_id, show_title, season, source_type = get_current_tvshow_info()
@@ -127,7 +186,6 @@ class PlayerMonitor(xbmc.Player):
             return
 
         state = get_active_video_playlist_state()
-        
         data = load_skip_data()
         if tvshow_id not in data:
             return
@@ -137,10 +195,7 @@ class PlayerMonitor(xbmc.Player):
 
         if "seasons" in record and season in record["seasons"]:
             val = record["seasons"][season]
-            if isinstance(val, dict):
-                skip_time = val.get("intro", 0)
-            else:
-                skip_time = val
+            skip_time = val.get("intro", 0) if isinstance(val, dict) else val
         elif "time" in record:
             skip_time = record["time"]
 
@@ -158,85 +213,6 @@ class PlayerMonitor(xbmc.Player):
                 log(f"Error during skip: {e}")
 
 
-class SkipCountdownWindow(xbmcgui.WindowXMLDialog):
-    def __init__(self, *args, **kwargs):
-        xbmcgui.WindowXMLDialog.__init__(self, *args, **kwargs)
-        self.cancelled = False
-        self.is_ready = False
-
-    def onInit(self):
-        self.is_ready = True
-
-    def onAction(self, action):
-        action_id = action.getId()
-        if action_id in [10, 92]:
-            self.cancelled = True
-            self.close()
-        elif action_id in [1, 15]:
-            xbmc.executebuiltin("PlayerControl(SmallSkipBackward)")
-        elif action_id in [2, 14]:
-            xbmc.executebuiltin("PlayerControl(SmallSkipForward)")
-        elif action_id in [3, 20]:
-            xbmc.executebuiltin("PlayerControl(BigSkipForward)")
-        elif action_id in [4, 21]:
-            xbmc.executebuiltin("PlayerControl(BigSkipBackward)")
-        elif action_id == 7:
-            xbmc.executebuiltin("ActivateWindow(VideoOSD)")
-        elif action_id == 77:
-            xbmc.executebuiltin("PlayerControl(Forward)")
-        elif action_id == 78:
-            xbmc.executebuiltin("PlayerControl(Rewind)")
-        elif action_id == 12:
-            xbmc.executebuiltin("PlayerControl(Play)")
-
-    def update_text(self, text):
-        if not self.is_ready:
-            return
-        try:
-            ctrl = self.getControl(100)
-            if ctrl:
-                ctrl.setLabel(text)
-        except Exception as e:
-            log(f"Error updating countdown text: {e}")
-
-
-def show_notification(title, message, duration=3000):
-    """统一的通知显示函数"""
-    try:
-        xbmc.executebuiltin(
-            'Notification(%s, %s, %d, %s)' % (
-                title,
-                message,
-                duration,
-                os.path.join(ADDON_PATH, "icon.png")
-            )
-        )
-    except Exception as e:
-        log(f"Error showing notification: {e}")
-
-
-def cleanup_countdown(countdown_window, countdown_thread):
-    """清理倒计时窗口"""
-    if countdown_window:
-        countdown_window.close()
-        if countdown_thread and countdown_thread.is_alive():
-            countdown_thread.join()
-    return None, None
-
-
-def handle_countdown_cancellation(countdown_state, player):
-    """处理倒计时取消"""
-    if countdown_state["window"] and countdown_state["window"].cancelled:
-        player.cancel_skip = True
-        show_notification(ADDON.getLocalizedString(32027), ADDON.getLocalizedString(32002))
-        countdown_state["window"], countdown_state["thread"] = cleanup_countdown(
-            countdown_state["window"], countdown_state["thread"]
-        )
-        countdown_state["active"] = False
-        return True
-    return False
-
-
 def create_countdown_window():
     try:
         window = SkipCountdownWindow("notification_overlay.xml", ADDON_PATH)
@@ -248,47 +224,7 @@ def create_countdown_window():
         return None, None
 
 
-def handle_outro_enter(countdown_state):
-    countdown_state["active"] = True
-    countdown_state["remaining"] = 6.0
-    countdown_state["window"], countdown_state["thread"] = create_countdown_window()
-    
-    tvshow_id, show_title, season, source_type = get_current_tvshow_info()
-    state = get_active_video_playlist_state()
-    
-    try:
-        raw_string = ADDON.getLocalizedString(32001)
-        
-        season_num, episode_num = get_season_episode_from_state(source_type, state, season)
-        
-        if '%' in raw_string:
-            notification_text = raw_string % (season_num, episode_num)
-        else:
-            notification_text = f"S{season_num:02d}E{episode_num:02d} {raw_string}"
-        
-        show_notification(ADDON.getLocalizedString(32027), notification_text)
-        log("handle_outro_enter: Notification executed")
-    except Exception as e:
-        log(f"Error showing outro notification: {e}")
-        log(traceback.format_exc())
-    
-    if countdown_state["window"] and countdown_state["window"].is_ready:
-        countdown_state["window"].update_text(ADDON.getLocalizedString(32003) % int(countdown_state["remaining"]))
-
-
-def reset_outro_state(countdown_state, player):
-    if player.cancel_skip:
-        player.cancel_skip = False
-    if countdown_state["active"]:
-        countdown_state["active"] = False
-        log("Playback time before outro range. Resetting countdown.")
-    countdown_state["window"], countdown_state["thread"] = cleanup_countdown(
-        countdown_state["window"], countdown_state["thread"]
-    )
-
-
 def stop_playback_and_wait(timeout_ms=3000, interval_ms=100):
-    """安全地停止播放并等待"""
     player = xbmc.Player()
     try:
         if player.isPlayingVideo():
@@ -296,6 +232,7 @@ def stop_playback_and_wait(timeout_ms=3000, interval_ms=100):
     except Exception as e:
         log(f"stop_playback_and_wait: stop failed: {e}")
         return
+    
     start_time = time.time()
     while True:
         try:
@@ -309,20 +246,10 @@ def stop_playback_and_wait(timeout_ms=3000, interval_ms=100):
         xbmc.sleep(interval_ms)
 
 
-def safe_get_state_value(state, key, default=None):
-    """安全地获取 state 字典的值"""
-    try:
-        return state.get(key) if isinstance(state, dict) else default
-    except Exception:
-        return default
-
-
 def execute_next_episode(countdown_state):
-    cleanup_countdown(countdown_state["window"], countdown_state["thread"])
-    countdown_state["window"], countdown_state["thread"] = None, None
+    countdown_state.cleanup()
     
     mark_current_episode_as_watched()
-    
     shared_state = State()
     
     def try_play_next():
@@ -333,30 +260,29 @@ def execute_next_episode(countdown_state):
         state = get_active_video_playlist_state()
         
         if state:
-            playlist_position = safe_get_state_value(state, "position")
-            playlist_id = safe_get_state_value(state, "playlistid")
+            playlist_position = state.get("position")
+            playlist_id = state.get("playlistid")
             if is_next_episode_available_in_playlist(playlist_id, playlist_position):
                 try_play_next()
-                countdown_state["active"] = False
+                countdown_state.active = False
                 return
         
         tvshow_id, show_title, season, source_type = get_current_tvshow_info()
         
         if source_type == 'library' and tvshow_id and str(tvshow_id) != '-1':
-            current_file = safe_get_state_value(state, "file", "") if state else ""
-            current_episode_num = safe_get_state_value(state, "episode") if state else None
-            current_season_num = safe_get_state_value(state, "season") if state else None
+            current_file = state.get("file", "") if state else ""
+            current_episode_num = state.get("episode") if state else None
+            current_season_num = state.get("season") if state else None
             
             next_episode = get_next_episode_from_library(
-                tvshow_id, current_file,
-                include_watched=True,
+                tvshow_id, current_file, include_watched=True,
                 current_episode_num=current_episode_num,
                 current_season_num=current_season_num
             )
             
             if next_episode and play_episode_from_library(next_episode):
                 shared_state.set_playing_next(True)
-                countdown_state["active"] = False
+                countdown_state.active = False
                 return
         
         if source_type == "directory" and state:
@@ -367,35 +293,73 @@ def execute_next_episode(countdown_state):
                 stop_playback_and_wait(timeout_ms=5000, interval_ms=200)
                 xbmc.sleep(800)
                 if play_file(next_file):
-                    countdown_state["active"] = False
+                    countdown_state.active = False
                     return
         
         try_play_next()
-        
     except Exception:
         try:
             try_play_next()
         except Exception:
             pass
     
-    countdown_state["active"] = False
+    countdown_state.active = False
+
+
+def handle_outro_enter(countdown_state):
+    countdown_state.active = True
+    countdown_state.remaining = 6.0
+    countdown_state.window, countdown_state.thread = create_countdown_window()
+    
+    tvshow_id, show_title, season, source_type = get_current_tvshow_info()
+    state = get_active_video_playlist_state()
+    
+    try:
+        raw_string = ADDON.getLocalizedString(32001)
+        season_num, episode_num = get_season_episode_from_state(source_type, state, season)
+        
+        if '%' in raw_string:
+            notification_text = raw_string % (season_num, episode_num)
+        else:
+            notification_text = f"S{season_num:02d}E{episode_num:02d} {raw_string}"
+        
+        show_notification(ADDON.getLocalizedString(32027), notification_text)
+    except Exception as e:
+        log(f"Error showing outro notification: {e}")
+    
+    if countdown_state.window and countdown_state.window.is_ready:
+        countdown_state.window.update_text(ADDON.getLocalizedString(32003) % int(countdown_state.remaining))
+
+
+def reset_outro_state(countdown_state, player):
+    if player.cancel_skip:
+        player.cancel_skip = False
+    if countdown_state.active:
+        countdown_state.active = False
+        log("Playback time before outro range. Resetting countdown.")
+    countdown_state.cleanup()
+
+
+def handle_countdown_cancellation(countdown_state, player):
+    if countdown_state.window and countdown_state.window.cancelled:
+        player.cancel_skip = True
+        show_notification(ADDON.getLocalizedString(32027), ADDON.getLocalizedString(32002))
+        countdown_state.cleanup()
+        return True
+    return False
 
 
 def update_countdown_ui(countdown_state, player):
-    if countdown_state["remaining"] <= 0:
+    if countdown_state.remaining <= 0:
         return
+    
     try:
-        display_seconds = int(countdown_state["remaining"]) + 1
-        if countdown_state["window"] and countdown_state["window"].is_ready:
-            countdown_state["window"].update_text(ADDON.getLocalizedString(32003) % display_seconds)
+        display_seconds = int(countdown_state.remaining) + 1
+        if countdown_state.window and countdown_state.window.is_ready:
+            countdown_state.window.update_text(ADDON.getLocalizedString(32003) % display_seconds)
 
-        if countdown_state["window"] and countdown_state["window"].cancelled:
-            player.cancel_skip = True
-            show_notification(ADDON.getLocalizedString(32027), ADDON.getLocalizedString(32002))
-            countdown_state["window"], countdown_state["thread"] = cleanup_countdown(
-                countdown_state["window"], countdown_state["thread"]
-            )
-            countdown_state["active"] = False
+        if handle_countdown_cancellation(countdown_state, player):
+            return
     except Exception as e:
         log(f"Error updating countdown window: {e}")
 
@@ -405,13 +369,7 @@ if __name__ == '__main__':
 
     monitor = xbmc.Monitor()
     player = PlayerMonitor()
-
-    countdown_state = {
-        "window": None,
-        "thread": None,
-        "active": False,
-        "remaining": 0.0,
-    }
+    countdown_state = CountdownState()
     last_tick_time = time.time()
 
     while not monitor.abortRequested():
@@ -422,9 +380,9 @@ if __name__ == '__main__':
         if xbmcgui.Window(10000).getProperty("MFG.Reload") == "true":
             xbmcgui.Window(10000).clearProperty("MFG.Reload")
             player.update_outro_info()
-            countdown_state["active"] = False
+            countdown_state.active = False
 
-        if player.is_playing() and player.current_outro_time:
+        if player.is_video_playing() and player.current_outro_time:
             try:
                 current_time = player.getTime()
                 trigger_time = player.current_outro_time
@@ -432,25 +390,21 @@ if __name__ == '__main__':
                 if current_time < trigger_time - 6:
                     reset_outro_state(countdown_state, player)
                 elif not player.outro_triggered and not player.cancel_skip:
-                    if not countdown_state["active"]:
+                    if not countdown_state.active:
                         handle_outro_enter(countdown_state)
                     else:
                         if not xbmc.getCondVisibility("Player.Paused"):
-                            countdown_state["remaining"] -= dt
+                            countdown_state.remaining -= dt
                         update_countdown_ui(countdown_state, player)
-                        if countdown_state["remaining"] <= 0:
+                        if countdown_state.remaining <= 0:
                             player.outro_triggered = True
                             execute_next_episode(countdown_state)
-
             except Exception:
-                cleanup_countdown(countdown_state["window"], countdown_state["thread"])
-                countdown_state["window"], countdown_state["thread"] = None, None
-                countdown_state["active"] = False
+                countdown_state.cleanup()
+
         else:
-            if countdown_state["active"]:
-                cleanup_countdown(countdown_state["window"], countdown_state["thread"])
-                countdown_state["window"], countdown_state["thread"] = None, None
-                countdown_state["active"] = False
+            if countdown_state.active:
+                countdown_state.cleanup()
 
         if monitor.waitForAbort(0.3):
             break
