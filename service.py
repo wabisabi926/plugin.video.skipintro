@@ -12,7 +12,7 @@ from common import (
     get_next_episode_from_library, play_episode_from_library,
     is_next_episode_available_in_playlist, get_active_video_playlist_state,
     get_next_file_in_directory, play_file, extract_media_info_from_filename,
-    State, mark_current_episode_as_watched
+    State, mark_current_episode_as_watched, get_season_episode_from_state
 )
 
 
@@ -127,7 +127,6 @@ class PlayerMonitor(xbmc.Player):
             return
 
         state = get_active_video_playlist_state()
-        episode = safe_get_state_value(state, "episode")
         
         data = load_skip_data()
         if tvshow_id not in data:
@@ -152,17 +151,7 @@ class PlayerMonitor(xbmc.Player):
                     log(f"Auto skipping intro for {show_title} S{season}. Current: {current_time}, Target: {skip_time}")
                     self.seekTime(skip_time)
                     
-                    season_num = int(season) if season else 1
-                    
-                    if source_type == 'directory' and state:
-                        current_file = safe_get_state_value(state, "file", "")
-                        if current_file:
-                            _, episode_num, parsed = extract_media_info_from_filename(current_file)
-                            if not parsed or episode_num <= 0:
-                                episode_num = 1
-                    else:
-                        episode_num = int(episode) if episode and episode != -1 else 1
-                    
+                    season_num, episode_num = get_season_episode_from_state(source_type, state, season)
                     notification_text = ADDON.getLocalizedString(32000) % (season_num, episode_num)
                     show_notification(ADDON.getLocalizedString(32027), notification_text)
             except Exception as e:
@@ -270,29 +259,12 @@ def handle_outro_enter(countdown_state):
     try:
         raw_string = ADDON.getLocalizedString(32001)
         
-        if source_type == 'directory':
-            current_file = safe_get_state_value(state, "file", "")
-            if current_file:
-                season_num, episode_num, parsed = extract_media_info_from_filename(current_file)
-                
-                if parsed:
-                    if '%' in raw_string:
-                        notification_text = raw_string % (season_num, episode_num)
-                    else:
-                        notification_text = f"S{season_num:02d}E{episode_num:02d} {raw_string}"
-                else:
-                    notification_text = raw_string
-            else:
-                notification_text = raw_string
+        season_num, episode_num = get_season_episode_from_state(source_type, state, season)
+        
+        if '%' in raw_string:
+            notification_text = raw_string % (season_num, episode_num)
         else:
-            episode = safe_get_state_value(state, "episode")
-            season_num = int(season) if season else 1
-            episode_num = int(episode) if episode and episode != -1 else 1
-            
-            if '%' in raw_string:
-                notification_text = raw_string % (season_num, episode_num)
-            else:
-                notification_text = f"S{season_num:02d}E{episode_num:02d} {raw_string}"
+            notification_text = f"S{season_num:02d}E{episode_num:02d} {raw_string}"
         
         show_notification(ADDON.getLocalizedString(32027), notification_text)
         log("handle_outro_enter: Notification executed")

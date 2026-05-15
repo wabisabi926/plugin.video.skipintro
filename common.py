@@ -337,21 +337,44 @@ def mark_current_episode_as_watched():
 
 
 def get_next_file_in_directory(current_file):
-    current_norm = normalize_media_path(current_file)
-    if not current_norm:
-        return None
-    files = get_directory_playlist_files(current_norm)
-    if not files:
-        return None
-    norms = [normalize_media_path(path) for path in files]
     try:
-        idx = norms.index(current_norm)
-    except ValueError:
+        if not current_file:
+            log("get_next_file_in_directory: current_file is empty or None", xbmc.LOGWARNING)
+            return None
+
+        current_norm = normalize_media_path(current_file)
+        if not current_norm:
+            log(f"get_next_file_in_directory: cannot normalize path '{current_file}'", xbmc.LOGWARNING)
+            return None
+
+        log(f"get_next_file_in_directory: searching for next file after '{current_norm}'")
+
+        files = get_directory_playlist_files(current_file)
+        if not files:
+            log("get_next_file_in_directory: no files found in directory", xbmc.LOGWARNING)
+            return None
+
+        norms = [normalize_media_path(path) for path in files]
+
+        try:
+            idx = norms.index(current_norm)
+        except ValueError:
+            log(f"get_next_file_in_directory: current file '{current_norm}' not found in directory listing", xbmc.LOGWARNING)
+            return None
+
+        next_idx = idx + 1
+        if next_idx >= len(files):
+            log("get_next_file_in_directory: no next file (current is last in directory)", xbmc.LOGINFO)
+            return None
+
+        next_file = files[next_idx]
+        log(f"get_next_file_in_directory: found next file: '{next_file}'")
+        return next_file
+
+    except Exception as e:
+        log(f"get_next_file_in_directory: ERROR - {e}", xbmc.LOGERROR)
+        log(traceback.format_exc(), xbmc.LOGERROR)
         return None
-    next_idx = idx + 1
-    if next_idx >= len(files):
-        return None
-    return files[next_idx]
 
 
 class State:
@@ -600,77 +623,197 @@ def get_playlist_items(playlist_id):
     return items
 
 
+def get_season_episode_from_state(source_type, state, season):
+    """
+    获取当前播放的季数和集数
+    
+    Args:
+        source_type: 播放类型 ('library' 或 'directory')
+        state: 播放状态字典 (来自 get_active_video_playlist_state())
+        season: 季数字符串或 None
+    
+    Returns:
+        tuple: (season_num, episode_num)
+    """
+    try:
+        if source_type == 'directory' and isinstance(state, dict):
+            current_file = state.get("file", "")
+            if current_file:
+                season_num, episode_num, parsed = extract_media_info_from_filename(current_file)
+                if parsed and season_num > 0 and episode_num > 0:
+                    log(f"get_season_episode_from_state: extracted from filename - S{season_num}E{episode_num}")
+                    return season_num, episode_num
+        
+        if season:
+            try:
+                season_num = int(season)
+                if season_num <= 0:
+                    season_num = 1
+            except (TypeError, ValueError):
+                season_num = 1
+        else:
+            season_num = 1
+        
+        if isinstance(state, dict):
+            episode = state.get("episode")
+            if episode is not None and episode != -1:
+                try:
+                    episode_num = int(episode)
+                    if episode_num <= 0:
+                        episode_num = 1
+                except (TypeError, ValueError):
+                    episode_num = 1
+            else:
+                episode_num = 1
+        else:
+            episode_num = 1
+        
+        log(f"get_season_episode_from_state: S{season_num}E{episode_num}")
+        return season_num, episode_num
+    
+    except Exception as e:
+        log(f"get_season_episode_from_state: ERROR - {e}", xbmc.LOGERROR)
+        return 1, 1
+
+
 def get_season_episodes(tvshow_id, season):
-    if tvshow_id in (None, -1) or season in (None, -1):
+    try:
+        if tvshow_id in (None, -1, ""):
+            log(f"get_season_episodes: invalid tvshow_id={tvshow_id}", xbmc.LOGWARNING)
+            return None
+
+        if season in (None, -1, ""):
+            log(f"get_season_episodes: invalid season={season}", xbmc.LOGWARNING)
+            return None
+
+        try:
+            tvshow_id_int = int(tvshow_id)
+            season_int = int(season)
+        except (TypeError, ValueError) as e:
+            log(f"get_season_episodes: failed to convert tvshow_id={tvshow_id} or season={season} to int: {e}", xbmc.LOGERROR)
+            return None
+
+        if tvshow_id_int <= 0:
+            log(f"get_season_episodes: tvshow_id must be positive, got {tvshow_id_int}", xbmc.LOGWARNING)
+            return None
+
+        if season_int <= 0:
+            log(f"get_season_episodes: season must be positive, got {season_int}", xbmc.LOGWARNING)
+            return None
+
+        cache_key = f"season_{tvshow_id_int}_{season_int}"
+        
+        with _cache_lock:
+            if cache_key in playlist_cache:
+                cached = playlist_cache[cache_key]
+                if time.time() - cached['time'] < playlist_cache_expiry:
+                    log(f"get_season_episodes: returning cached data for S{season_int}")
+                    return cached['data']
+
+        log(f"get_season_episodes: fetching episodes for tvshow_id={tvshow_id_int}, season={season_int}")
+        
+        result = jsonrpc_call(
+            "VideoLibrary.GetEpisodes",
+            {
+                "tvshowid": tvshow_id_int,
+                "season": season_int,
+                "properties": ["file", "episode", "season", "title"],
+                "sort": {"method": "episode", "order": "ascending"},
+            },
+        ) or {}
+        
+        if not isinstance(result, dict):
+            log(f"get_season_episodes: invalid result type from API: {type(result).__name__}", xbmc.LOGERROR)
+            return None
+
+        episodes = result.get("episodes") or []
+
+        if not episodes:
+            log(f"get_season_episodes: no episodes found for S{season_int}")
+            return None
+
+        log(f"get_season_episodes: found {len(episodes)} episodes for S{season_int}")
+
+        for itm in episodes:
+            itm["tvshowid"] = tvshow_id_int
+            itm["season"] = season_int
+            itm["id"] = itm.get("episodeid")
+
+        season_info = {
+            "tvshowid": tvshow_id_int,
+            "season": season_int,
+            "episodes": episodes,
+        }
+
+        with _cache_lock:
+            playlist_cache[cache_key] = {'data': season_info, 'time': time.time()}
+        
+        return season_info
+    except Exception as e:
+        log(f"get_season_episodes: ERROR - {e}", xbmc.LOGERROR)
+        log(traceback.format_exc(), xbmc.LOGERROR)
         return None
-
-    cache_key = f"season_{tvshow_id}_{season}"
-    
-    with _cache_lock:
-        if cache_key in playlist_cache:
-            cached = playlist_cache[cache_key]
-            if time.time() - cached['time'] < playlist_cache_expiry:
-                return cached['data']
-
-    result = jsonrpc_call(
-        "VideoLibrary.GetEpisodes",
-        {
-            "tvshowid": int(tvshow_id),
-            "season": int(season),
-            "properties": ["file", "episode", "season", "title"],
-            "sort": {"method": "episode", "order": "ascending"},
-        },
-    ) or {}
-    episodes = result.get("episodes") or []
-
-    if not episodes:
-        return None
-
-    for itm in episodes:
-        itm["tvshowid"] = int(tvshow_id)
-        itm["season"] = int(season)
-        itm["id"] = itm.get("episodeid")
-
-    season_info = {
-        "tvshowid": int(tvshow_id),
-        "season": int(season),
-        "episodes": episodes,
-    }
-
-    with _cache_lock:
-        playlist_cache[cache_key] = {'data': season_info, 'time': time.time()}
-    
-    return season_info
 
 
 def get_directory_playlist_files(current_file):
-    parent_dir = get_parent_media_path(current_file)
-    if not parent_dir:
+    try:
+        if not current_file:
+            log("get_directory_playlist_files: current_file is empty or None", xbmc.LOGWARNING)
+            return []
+
+        parent_dir = get_parent_media_path(current_file)
+        if not parent_dir:
+            log(f"get_directory_playlist_files: cannot get parent directory for '{current_file}'", xbmc.LOGWARNING)
+            return []
+
+        log(f"get_directory_playlist_files: scanning directory '{parent_dir}'")
+
+        result = jsonrpc_call(
+            "Files.GetDirectory",
+            {
+                "directory": parent_dir,
+                "media": "video",
+                "properties": ["file", "title"],
+            },
+        ) or {}
+
+        if not isinstance(result, dict):
+            log(f"get_directory_playlist_files: invalid result type from API: {type(result).__name__}", xbmc.LOGERROR)
+            return []
+
+        files = result.get("files") or []
+
+        if not isinstance(files, list):
+            log(f"get_directory_playlist_files: files is not a list, got {type(files).__name__}", xbmc.LOGERROR)
+            return []
+
+        playlist_items = []
+        for idx, item in enumerate(files):
+            if not isinstance(item, dict):
+                log(f"get_directory_playlist_files: item at index {idx} is not a dict: {type(item).__name__}", xbmc.LOGWARNING)
+                continue
+
+            file_path = item.get("file")
+            if not file_path:
+                continue
+
+            file_type = item.get("filetype")
+            if file_type and file_type != "file":
+                continue
+
+            sort_title = item.get("title") or item.get("label") or os.path.basename(normalize_media_path(file_path))
+            playlist_items.append((sort_title, file_path))
+
+        playlist_items.sort(key=lambda value: (natural_sort_key(value[0]), normalize_media_path(value[1]).casefold()))
+        result_files = [file_path for _, file_path in playlist_items]
+        
+        log(f"get_directory_playlist_files: found {len(result_files)} video files in '{parent_dir}'")
+        return result_files
+
+    except Exception as e:
+        log(f"get_directory_playlist_files: ERROR - {e}", xbmc.LOGERROR)
+        log(traceback.format_exc(), xbmc.LOGERROR)
         return []
-
-    result = jsonrpc_call(
-        "Files.GetDirectory",
-        {
-            "directory": parent_dir,
-            "media": "video",
-            "properties": ["file", "title"],
-        },
-    ) or {}
-    files = result.get("files") or []
-
-    playlist_items = []
-    for item in files:
-        file_path = item.get("file")
-        if not file_path:
-            continue
-        file_type = item.get("filetype")
-        if file_type and file_type != "file":
-            continue
-        sort_title = item.get("title") or item.get("label") or os.path.basename(normalize_media_path(file_path))
-        playlist_items.append((sort_title, file_path))
-
-    playlist_items.sort(key=lambda value: (natural_sort_key(value[0]), normalize_media_path(value[1]).casefold()))
-    return [file_path for _, file_path in playlist_items]
 
 
 def autofill_playlist_for_current_video():
