@@ -6,12 +6,13 @@ import time
 import threading
 
 from common import (
-    ADDON, ADDON_PATH, load_skip_data, get_current_tvshow_info, 
+    ADDON_PATH, load_skip_data, get_current_tvshow_info, 
     autofill_playlist_for_current_video, log, 
     get_next_episode_from_library, play_episode_from_library,
     is_next_episode_available_in_playlist, get_active_video_playlist_state,
     get_next_file_in_directory, play_file, extract_media_info_from_filename,
-    State, mark_current_episode_as_watched, get_season_episode_from_state
+    State, mark_current_episode_as_watched, get_season_episode_from_state,
+    SETTINGS
 )
 
 
@@ -205,10 +206,10 @@ class PlayerMonitor(xbmc.Player):
                 if current_time < skip_time:
                     log(f"Auto skipping intro for {show_title} S{season}. Current: {current_time}, Target: {skip_time}")
                     self.seekTime(skip_time)
-                    
+
                     season_num, episode_num = get_season_episode_from_state(source_type, state, season)
-                    notification_text = ADDON.getLocalizedString(32000) % (season_num, episode_num)
-                    show_notification(ADDON.getLocalizedString(32027), notification_text)
+                    notification_text = SETTINGS.get_string(32000) % (season_num, episode_num)
+                    show_notification(SETTINGS.get_string(32027), notification_text)
             except Exception as e:
                 log(f"Error during skip: {e}")
 
@@ -232,7 +233,7 @@ def stop_playback_and_wait(timeout_ms=3000, interval_ms=100):
     except Exception as e:
         log(f"stop_playback_and_wait: stop failed: {e}")
         return
-    
+
     start_time = time.time()
     while True:
         try:
@@ -248,17 +249,17 @@ def stop_playback_and_wait(timeout_ms=3000, interval_ms=100):
 
 def execute_next_episode(countdown_state):
     countdown_state.cleanup()
-    
+
     mark_current_episode_as_watched()
     shared_state = State()
-    
+
     def try_play_next():
         shared_state.set_playing_next(True)
         xbmc.executebuiltin("PlayerControl(Next)")
-    
+
     try:
         state = get_active_video_playlist_state()
-        
+
         if state:
             playlist_position = state.get("position")
             playlist_id = state.get("playlistid")
@@ -266,25 +267,25 @@ def execute_next_episode(countdown_state):
                 try_play_next()
                 countdown_state.active = False
                 return
-        
+
         tvshow_id, show_title, season, source_type = get_current_tvshow_info()
-        
+
         if source_type == 'library' and tvshow_id and str(tvshow_id) != '-1':
             current_file = state.get("file", "") if state else ""
             current_episode_num = state.get("episode") if state else None
             current_season_num = state.get("season") if state else None
-            
+
             next_episode = get_next_episode_from_library(
                 tvshow_id, current_file, include_watched=True,
                 current_episode_num=current_episode_num,
                 current_season_num=current_season_num
             )
-            
+
             if next_episode and play_episode_from_library(next_episode):
                 shared_state.set_playing_next(True)
                 countdown_state.active = False
                 return
-        
+
         if source_type == "directory" and state:
             current_file = state.get("file", "")
             next_file = get_next_file_in_directory(current_file)
@@ -295,14 +296,14 @@ def execute_next_episode(countdown_state):
                 if play_file(next_file):
                     countdown_state.active = False
                     return
-        
+
         try_play_next()
     except Exception:
         try:
             try_play_next()
         except Exception:
             pass
-    
+
     countdown_state.active = False
 
 
@@ -310,25 +311,25 @@ def handle_outro_enter(countdown_state):
     countdown_state.active = True
     countdown_state.remaining = 6.0
     countdown_state.window, countdown_state.thread = create_countdown_window()
-    
+
     tvshow_id, show_title, season, source_type = get_current_tvshow_info()
     state = get_active_video_playlist_state()
-    
+
     try:
-        raw_string = ADDON.getLocalizedString(32001)
+        raw_string = SETTINGS.get_string(32001)
         season_num, episode_num = get_season_episode_from_state(source_type, state, season)
-        
+
         if '%' in raw_string:
             notification_text = raw_string % (season_num, episode_num)
         else:
             notification_text = f"S{season_num:02d}E{episode_num:02d} {raw_string}"
-        
-        show_notification(ADDON.getLocalizedString(32027), notification_text)
+
+        show_notification(SETTINGS.get_string(32027), notification_text)
     except Exception as e:
         log(f"Error showing outro notification: {e}")
-    
+
     if countdown_state.window and countdown_state.window.is_ready:
-        countdown_state.window.update_text(ADDON.getLocalizedString(32003) % int(countdown_state.remaining))
+        countdown_state.window.update_text(SETTINGS.get_string(32003) % int(countdown_state.remaining))
 
 
 def reset_outro_state(countdown_state, player):
@@ -343,7 +344,7 @@ def reset_outro_state(countdown_state, player):
 def handle_countdown_cancellation(countdown_state, player):
     if countdown_state.window and countdown_state.window.cancelled:
         player.cancel_skip = True
-        show_notification(ADDON.getLocalizedString(32027), ADDON.getLocalizedString(32002))
+        show_notification(SETTINGS.get_string(32027), SETTINGS.get_string(32002))
         countdown_state.cleanup()
         return True
     return False
@@ -352,11 +353,11 @@ def handle_countdown_cancellation(countdown_state, player):
 def update_countdown_ui(countdown_state, player):
     if countdown_state.remaining <= 0:
         return
-    
+
     try:
         display_seconds = int(countdown_state.remaining) + 1
         if countdown_state.window and countdown_state.window.is_ready:
-            countdown_state.window.update_text(ADDON.getLocalizedString(32003) % display_seconds)
+            countdown_state.window.update_text(SETTINGS.get_string(32003) % display_seconds)
 
         if handle_countdown_cancellation(countdown_state, player):
             return

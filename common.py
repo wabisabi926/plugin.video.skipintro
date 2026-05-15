@@ -36,6 +36,67 @@ def log(msg, prefix="[SkipIntro]"):
     xbmc.log(f"{prefix} {msg}", xbmc.LOGINFO)
 
 
+class SettingsManager:
+    def __init__(self):
+        self._addon = ADDON
+        self._settings_cache = {}
+        self._cache_time = {}
+        self._cache_ttl = 5.0
+
+    def _get_setting(self, setting_id, default=None):
+        now = time.time()
+        if setting_id in self._settings_cache:
+            cache_time = self._cache_time.get(setting_id, 0)
+            if now - cache_time < self._cache_ttl:
+                return self._settings_cache[setting_id]
+
+        try:
+            value = self._addon.getSetting(setting_id)
+            self._settings_cache[setting_id] = value
+            self._cache_time[setting_id] = now
+            return value
+        except Exception as e:
+            log(f"Error getting setting '{setting_id}': {e}")
+            return default
+
+    @property
+    def autofill_playlist_on_play(self):
+        value = self._get_setting('autofill_playlist_on_play')
+        return value == 'true'
+
+    @property
+    def debug_mode(self):
+        value = self._get_setting('debug_mode')
+        return value == 'true'
+
+    def get_string(self, string_id):
+        try:
+            return self._addon.getLocalizedString(string_id)
+        except Exception as e:
+            log(f"Error getting string {string_id}: {e}")
+            return f"[String {string_id}]"
+
+    def invalidate_cache(self):
+        self._settings_cache.clear()
+        self._cache_time.clear()
+
+    def set_setting(self, setting_id, value):
+        try:
+            if isinstance(value, bool):
+                value = 'true' if value else 'false'
+            elif isinstance(value, (int, float)):
+                value = str(value)
+            self._addon.setSetting(setting_id, value)
+            self.invalidate_cache()
+            return True
+        except Exception as e:
+            log(f"Error setting '{setting_id}': {e}")
+            return False
+
+
+SETTINGS = SettingsManager()
+
+
 def _get_cached_data(cache_name, force_reload=False):
     with _cache_lock:
         cache = _caches.get(cache_name)
@@ -868,7 +929,7 @@ def autofill_playlist_for_current_video():
 
 
 def _do_autofill():
-    if ADDON.getSetting('autofill_playlist_on_play') == 'false':
+    if not SETTINGS.autofill_playlist_on_play:
         return
 
     state = get_active_video_playlist_state()
