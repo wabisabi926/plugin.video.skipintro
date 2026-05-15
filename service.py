@@ -307,6 +307,39 @@ def execute_next_episode(countdown_state):
     countdown_state.active = False
 
 
+def has_next_episode():
+    state = get_active_video_playlist_state()
+    if not state:
+        return False
+
+    playlist_position = state.get("position")
+    playlist_id = state.get("playlistid")
+    if is_next_episode_available_in_playlist(playlist_id, playlist_position):
+        return True
+
+    tvshow_id, show_title, season, source_type = get_current_tvshow_info()
+
+    if source_type == 'library' and tvshow_id and str(tvshow_id) != '-1':
+        current_file = state.get("file", "")
+        current_episode_num = state.get("episode")
+        current_season_num = state.get("season")
+        next_episode = get_next_episode_from_library(
+            tvshow_id, current_file, include_watched=True,
+            current_episode_num=current_episode_num,
+            current_season_num=current_season_num
+        )
+        if next_episode:
+            return True
+
+    if source_type == "directory":
+        current_file = state.get("file", "")
+        next_file = get_next_file_in_directory(current_file)
+        if next_file:
+            return True
+
+    return False
+
+
 def handle_outro_enter(countdown_state):
     countdown_state.active = True
     countdown_state.remaining = 6.0
@@ -392,7 +425,12 @@ if __name__ == '__main__':
                     reset_outro_state(countdown_state, player)
                 elif not player.outro_triggered and not player.cancel_skip:
                     if not countdown_state.active:
-                        handle_outro_enter(countdown_state)
+                        if not has_next_episode():
+                            show_notification(SETTINGS.get_string(32027), SETTINGS.get_string(32032), duration=5000)
+                            mark_current_episode_as_watched()
+                            player.outro_triggered = True
+                        else:
+                            handle_outro_enter(countdown_state)
                     else:
                         if not xbmc.getCondVisibility("Player.Paused"):
                             countdown_state.remaining -= dt

@@ -172,3 +172,8 @@ msgstr "常规"
 msgctxt "#32031"
 msgid "Logging"
 msgstr "日志"
+
+#: service.py
+msgctxt "#32032"
+msgid "No more episodes available"
+msgstr "已播放完最后一集"
