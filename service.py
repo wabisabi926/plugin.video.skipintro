@@ -108,6 +108,7 @@ class PlayerMonitor(xbmc.Player):
         return self._cached_playing_state or False
 
     def onAVStarted(self):
+        self.cancel_skip = False
         self.check_intro()
         self.retry_update_outro()
         autofill_playlist_for_current_video()
@@ -291,8 +292,7 @@ def execute_next_episode(countdown_state):
             next_file = get_next_file_in_directory(current_file)
             if next_file:
                 shared_state.set_playing_next(True)
-                stop_playback_and_wait(timeout_ms=5000, interval_ms=200)
-                xbmc.sleep(800)
+                stop_playback_and_wait(timeout_ms=5000, interval_ms=100)
                 if play_file(next_file):
                     countdown_state.active = False
                     return

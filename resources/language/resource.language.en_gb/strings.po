@@ -125,7 +125,7 @@ msgstr "Uncategorized"
 
 #: default.py
 msgctxt "#32022"
-msgid "TV Shows"
+msgid "TV Shows and Episodes"
 msgstr "TV Shows and Episodes"
 
 #: default.py
@@ -172,6 +172,11 @@ msgstr "General"
 msgctxt "#32031"
 msgid "Logging"
 msgstr "Logging"
+
+#: settings.xml
+msgctxt "#32033"
+msgid "Delete all skip points"
+msgstr "Delete all skip points"
 
 #: service.py
 msgctxt "#32032"

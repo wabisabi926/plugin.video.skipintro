@@ -66,7 +66,7 @@ msgstr "记录失败，请查看日志"
 #: default.py
 msgctxt "#32010"
 msgid "No intro/outro markers"
-msgstr "无片头片尾标记点"
+msgstr "无片头片尾记录点"
 
 #: default.py
 msgctxt "#32011"
@@ -91,7 +91,7 @@ msgstr "当前无片尾记录"
 #: default.py
 msgctxt "#32015"
 msgid "Delete failed!Please call within first or last 20% of the episode"
-msgstr "删除失败。请在剧集前或后 20% 时间段内调用"
+msgstr "删除失败，请在剧集前或后 20% 时间段内调用"
 
 #: default.py
 msgctxt "#32016"
@@ -106,7 +106,7 @@ msgstr "播放时自动补全播放列表"
 #: settings.xml
 msgctxt "#32018"
 msgid "Automatically fill the playlist with episodes from the same season when playing a TV show episode."
-msgstr "播放电视剧集时，自动将同季剧集添加到播放列表中。"
+msgstr "播放电视剧集时自动将同季剧集添加到播放列表中"
 
 #: settings.xml
 msgctxt "#32019"
@@ -125,7 +125,7 @@ msgstr "未分类"
 
 #: default.py
 msgctxt "#32022"
-msgid "TV Shows"
+msgid "TV Shows and Episodes"
 msgstr "电视剧和剧集"
 
 #: default.py
@@ -172,6 +172,11 @@ msgstr "常规"
 msgctxt "#32031"
 msgid "Logging"
 msgstr "日志"
+
+#: settings.xml
+msgctxt "#32033"
+msgid "Delete all skip points"
+msgstr "删除所有记录点"
 
 #: service.py
 msgctxt "#32032"
