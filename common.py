@@ -157,7 +157,6 @@ def save_skip_data(data):
             os.remove(backup_file)
 
         _set_cached_data('skip_data', data)
-
     except Exception as e:
         log(f"Error saving skip data: {e}")
         if os.path.exists(temp_file):
@@ -172,6 +171,12 @@ def save_skip_data(data):
                 os.rename(backup_file, SKIP_DATA_FILE)
             except Exception as backup_e:
                 log(f"Failed to restore backup: {backup_e}")
+
+
+def delete_all_skip_points():
+    if os.path.exists(SKIP_DATA_FILE):
+        os.remove(SKIP_DATA_FILE)
+    _set_cached_data('skip_data', {})
 
 
 def jsonrpc_call(method, params=None, request_id=None):

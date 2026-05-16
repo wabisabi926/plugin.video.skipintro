@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.3.3-blue.svg)](https://github.com/wabisabi926/plugin.video.skipintro)
+[![Version](https://img.shields.io/badge/version-1.3.6-blue.svg)](https://github.com/wabisabi926/plugin.video.skipintro)
 [![License](https://img.shields.io/badge/license-NC--3.0-green.svg)](LICENSE.txt)
 [![Platform](https://img.shields.io/badge/platform-Kodi-orange.svg)](https://kodi.tv/)
 
@@ -89,8 +89,8 @@
 1. 在 Kodi 中打开「按键映射魔改版」插件
 2. 选择「编辑快捷键」
 3. 找到以下功能并映射到遥控器按键：
-   - **记录当前时间为跳过点（片头/片尾）**
-   - **删除当前剧集的跳过点记录**
+   - **记录当前时间为记录点（片头/片尾）**
+   - **删除当前剧集的记录点**
 4. 💡 **小技巧**：将两个功能映射到同一个按键
    - 短按 = 记录
    - 长按 = 删除
@@ -288,7 +288,7 @@ addon_data/plugin.video.skipintro/skip_intro_data.json
 RunScript(plugin.video.skipintro, ?mode=record_skip_point)
 ```
 
-**删除跳过记录**：
+**删除跳过点**：
 ```
 RunScript(plugin.video.skipintro, ?mode=delete_skip_point)
 ```
@@ -343,6 +343,12 @@ RunScript(plugin.video.skipintro, ?mode=delete_skip_point)
 ---
 
 ## 更新日志
+
+### v1.3.6 (2026-05)
+- ✅ 设置界面重构，分为「常规」和「日志」两个类别
+- ✅ 新增「删除所有记录点」功能，支持一键清除所有跳过时间点（带确认对话框）
+- 🐛 修复取消跳过后后续剧集无法自动跳过的问题
+- 📝 精简核心函数代码，移除冗余代码
 
 ### v1.3.5 (2026-05)
 - ✅ 播放到最后一集时显示「已播放完最后一集」提示

@@ -8,7 +8,7 @@ import xbmcgui
 
 from common import (
     ADDON_PATH, load_skip_data, save_skip_data, get_current_tvshow_info, log, 
-    jsonrpc_call, SETTINGS
+    jsonrpc_call, SETTINGS, delete_all_skip_points
 )
 
 
@@ -226,11 +226,22 @@ def router(paramstring):
 
     params = dict(urllib.parse.parse_qsl(paramstring.lstrip('?')))
     mode = params.get("mode")
+    action = params.get("action")
 
     if mode == "record_skip_point":
         record_skip_point()
     elif mode == "delete_skip_point":
         delete_skip_point()
+    elif action == "delete_all_skip_points":
+        confirmed = xbmcgui.Dialog().yesno(
+            SETTINGS.get_string(32027),
+            "确定要删除所有记录点吗？此操作不可撤销。",
+            yeslabel=SETTINGS.get_string(32025),
+            nolabel=SETTINGS.get_string(32026),
+        )
+        if confirmed:
+            delete_all_skip_points()
+            show_notification("已删除所有记录点")
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@
 <settings>
     <category label="32030">
         <setting id="autofill_playlist_on_play" type="bool" label="32017" description="32018" default="false"/>
+        <setting id="delete_all_skip_points" type="action" label="32033" action="RunScript(plugin.video.skipintro, action=delete_all_skip_points)"/>
     </category>
     <category label="32031">
         <setting id="debug_mode" type="bool" label="32028" description="32029" default="false"/>
