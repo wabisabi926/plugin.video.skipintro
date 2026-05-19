@@ -15,8 +15,7 @@ from common import (
     State, mark_current_episode_as_watched, get_season_episode_from_state,
     SETTINGS, show_notification,
     OUTRO_COUNTDOWN_SECONDS, OUTRO_TRIGGER_THRESHOLD_SECONDS,
-    RETRY_MAX_ATTEMPTS, RETRY_DELAY_MS, CACHE_CLEANUP_INTERVAL_SECONDS,
-    run_async, shutdown_thread_pool
+    RETRY_MAX_ATTEMPTS, RETRY_DELAY_MS, CACHE_CLEANUP_INTERVAL_SECONDS
 )
 
 
@@ -104,7 +103,7 @@ class PlayerMonitor(xbmc.Player):
         self.cancel_skip = False
         self.check_intro()
         self.retry_update_outro()
-        run_async(autofill_playlist_for_current_video)()
+        autofill_playlist_for_current_video()
 
     def onPlayBackEnded(self) -> None:
         if self.state.get_playing_next():
@@ -387,5 +386,4 @@ if __name__ == '__main__':
 
         monitor.waitForAbort(100)
 
-    shutdown_thread_pool(wait=True)
     log("Service stopped")
