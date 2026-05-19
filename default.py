@@ -1,68 +1,30 @@
 # -*- coding: utf-8 -*-
 import sys
 import urllib.parse
-import os
-
 import xbmc
 import xbmcgui
+import xbmcplugin
+import json
+import os
 
 from common import (
-    ADDON_PATH, load_skip_data, save_skip_data, get_current_tvshow_info, log, 
-    jsonrpc_call, SETTINGS, delete_all_skip_points
+    ADDON_PATH, load_skip_data, save_skip_data, get_current_tvshow_info, log, log_exception,
+    jsonrpc_call, SETTINGS, delete_all_skip_points, show_notification
 )
 
 
-def show_notification(message, duration=2000):
-    xbmc.executebuiltin(
-        'Notification(%s, %s, %d, %s)' % (
-            SETTINGS.get_string(32027),
-            message,
-            duration,
-            os.path.join(ADDON_PATH, "icon.png")
-        )
-    )
-
-
 def get_current_playback_time():
+    player = xbmc.Player()
+    if not player.isPlayingVideo():
+        return 0, 0
+
     try:
-        player = xbmc.Player()
         current_time = player.getTime()
         total_time = player.getTotalTime()
         return current_time, total_time
-    except Exception:
+    except Exception as e:
+        log(f"Error getting playback time: {e}", log_level=xbmc.LOGWARNING)
         return 0, 0
-
-
-def get_autoplay_settings():
-    result = jsonrpc_call("Settings.GetSettingValue", {"setting": "videoplayer.autoplaynextitem"}) or {}
-    value = result.get("value") if isinstance(result, dict) else None
-
-    current_values = []
-    if isinstance(value, list):
-        for item in value:
-            try:
-                current_values.append(int(item))
-            except (TypeError, ValueError):
-                continue
-    elif isinstance(value, (int, float)):
-        current_values.append(int(value))
-    elif isinstance(value, str):
-        for item in value.split(','):
-            item = item.strip()
-            if item:
-                try:
-                    current_values.append(int(item))
-                except ValueError:
-                    continue
-    return current_values
-
-
-def set_autoplay_settings(values):
-    result = jsonrpc_call(
-        "Settings.SetSettingValue",
-        {"setting": "videoplayer.autoplaynextitem", "value": sorted(set(values))}
-    )
-    return result == "OK"
 
 
 def ensure_autoplay_next_setting(tvshow_id, source_type):
@@ -104,7 +66,7 @@ def ensure_autoplay_next_setting(tvshow_id, source_type):
         new_values = current_values + missing_values
 
         if not set_autoplay_settings(new_values):
-            show_notification(SETTINGS.get_string(32020))
+            show_notification(SETTINGS.get_string(32027), SETTINGS.get_string(32020))
             return
 
         try:
@@ -112,15 +74,47 @@ def ensure_autoplay_next_setting(tvshow_id, source_type):
             if player.isPlayingVideo():
                 player.stop()
         except Exception as e:
-            log(f"Error stopping playback after setting autoplay next: {e}")
+            log_exception(e, "ensure_autoplay_next_setting stop playback")
     except Exception as e:
-        log(f"Error in ensure_autoplay_next_setting: {e}")
+        log_exception(e, "ensure_autoplay_next_setting")
+
+
+def get_autoplay_settings():
+    try:
+        result = jsonrpc_call(
+            "Settings.GetSettingValue",
+            {"setting": "videoplayer.autoplaynextitem"}
+        )
+        if result is None:
+            return []
+
+        value = str(result)
+        if not value:
+            return []
+
+        return [int(v.strip()) for v in value.split(",") if v.strip().isdigit()]
+    except Exception as e:
+        log(f"Error getting autoplay settings: {e}", log_level=xbmc.LOGWARNING)
+        return []
+
+
+def set_autoplay_settings(values):
+    try:
+        value_str = ",".join(str(v) for v in sorted(set(values)))
+        result = jsonrpc_call(
+            "Settings.SetSettingValue",
+            {"setting": "videoplayer.autoplaynextitem", "value": value_str}
+        )
+        return result == "OK"
+    except Exception as e:
+        log(f"Error setting autoplay settings: {e}", log_level=xbmc.LOGWARNING)
+        return False
 
 
 def record_skip_point():
     tvshow_id, show_title, season, source_type = get_current_tvshow_info()
     if not tvshow_id:
-        show_notification(SETTINGS.get_string(32004))
+        show_notification(SETTINGS.get_string(32027), SETTINGS.get_string(32004))
         return
 
     current_time, total_time = get_current_playback_time()
@@ -154,7 +148,7 @@ def record_skip_point():
         m, s = divmod(int(outro_duration), 60)
         msg = SETTINGS.get_string(32006) % (m, s)
     else:
-        show_notification(SETTINGS.get_string(32007))
+        show_notification(SETTINGS.get_string(32027), SETTINGS.get_string(32007))
         return
 
     data[tvshow_id]["seasons"][season] = season_data
@@ -163,7 +157,7 @@ def record_skip_point():
     xbmcgui.Window(10000).setProperty("MFG.Reload", "true")
 
     full_msg = SETTINGS.get_string(32008) % (msg, season)
-    show_notification(full_msg)
+    show_notification(SETTINGS.get_string(32027), full_msg)
     log(f"Recorded skip point for {show_title} Season {season}: {season_data}")
 
     ensure_autoplay_next_setting(tvshow_id, source_type)
@@ -172,7 +166,7 @@ def record_skip_point():
 def delete_skip_point():
     tvshow_id, show_title, season, source_type = get_current_tvshow_info()
     if not tvshow_id:
-        show_notification(SETTINGS.get_string(32004))
+        show_notification(SETTINGS.get_string(32027), SETTINGS.get_string(32004))
         return
 
     current_time, total_time = get_current_playback_time()
@@ -183,7 +177,7 @@ def delete_skip_point():
     data = load_skip_data()
 
     if tvshow_id not in data or "seasons" not in data[tvshow_id] or season not in data[tvshow_id]["seasons"]:
-        show_notification(SETTINGS.get_string(32010))
+        show_notification(SETTINGS.get_string(32027), SETTINGS.get_string(32010))
         return
 
     raw_season = data[tvshow_id]["seasons"][season]
@@ -202,7 +196,7 @@ def delete_skip_point():
         else:
             msg = SETTINGS.get_string(32014)
     else:
-        show_notification(SETTINGS.get_string(32015))
+        show_notification(SETTINGS.get_string(32027), SETTINGS.get_string(32015))
         return
 
     if not season_data:
@@ -216,7 +210,7 @@ def delete_skip_point():
     save_skip_data(data)
 
     xbmcgui.Window(10000).setProperty("MFG.Reload", "true")
-    show_notification(msg)
+    show_notification(SETTINGS.get_string(32027), msg)
 
 
 def router(paramstring):
@@ -241,9 +235,8 @@ def router(paramstring):
         )
         if confirmed:
             delete_all_skip_points()
-            show_notification("已删除所有记录点")
+            show_notification(SETTINGS.get_string(32027), "已删除所有记录点")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        router(sys.argv[1])
+    router(sys.argv[2] if len(sys.argv) > 2 else "")

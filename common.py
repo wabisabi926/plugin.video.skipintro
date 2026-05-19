@@ -8,109 +8,181 @@ import time
 import threading
 import xbmcaddon
 import shutil
+from typing import Any, Dict, List, Optional, Tuple, Union, Callable
 
-ADDON_ID = 'plugin.video.skipintro'
+ADDON_ID: str = 'plugin.video.skipintro'
 ADDON = xbmcaddon.Addon(ADDON_ID)
-ADDON_PATH = xbmcvfs.translatePath(f"special://home/addons/{ADDON_ID}/")
-ADDON_DATA_PATH = xbmcvfs.translatePath(f"special://profile/addon_data/{ADDON_ID}/")
+ADDON_PATH: str = xbmcvfs.translatePath(f"special://home/addons/{ADDON_ID}/")
+ADDON_DATA_PATH: str = xbmcvfs.translatePath(f"special://profile/addon_data/{ADDON_ID}/")
 
 if not os.path.exists(ADDON_DATA_PATH):
     os.makedirs(ADDON_DATA_PATH)
 
-SKIP_DATA_FILE = os.path.join(ADDON_DATA_PATH, 'skip_intro_data.json')
-MAX_PLAYLIST_ITEMS_BEFORE = 10
-MAX_PLAYLIST_ITEMS_AFTER = 50
-MAX_DELETE_LOWER_EPISODES_BELOW = 10
-PLAYLIST_MUTATION_DELAY_MS = 300
+SKIP_DATA_FILE: str = os.path.join(ADDON_DATA_PATH, 'skip_intro_data.json')
+MAX_PLAYLIST_ITEMS_BEFORE: int = 10
+MAX_PLAYLIST_ITEMS_AFTER: int = 50
+MAX_DELETE_LOWER_EPISODES_BELOW: int = 10
+PLAYLIST_MUTATION_DELAY_MS: int = 300
+
+OUTRO_COUNTDOWN_SECONDS: float = 6.0
+OUTRO_TRIGGER_THRESHOLD_SECONDS: float = 6.0
+RETRY_MAX_ATTEMPTS: int = 10
+RETRY_DELAY_MS: int = 1000
+CACHE_CLEANUP_INTERVAL_SECONDS: float = 300.0
 
 _cache_lock = threading.Lock()
-_caches = {
-    'skip_data': {'data': None, 'time': 0, 'ttl': 2.0},
-    'playlist_state': {'data': None, 'time': 0, 'ttl': 0.5},
+_caches: Dict[str, Any] = {
+    'skip_data': {'data': None, 'time': 0.0, 'ttl': 2.0},
+    'playlist_state': {'data': None, 'time': 0.0, 'ttl': 0.5},
     'season_episodes': {}
 }
-playlist_cache_expiry = 3600
+playlist_cache_expiry: int = 3600
+MAX_SEASON_EPISODES_CACHE_SIZE: int = 50
 
 
-def log(msg, prefix="[SkipIntro]"):
-    xbmc.log(f"{prefix} {msg}", xbmc.LOGINFO)
+def cleanup_expired_caches() -> None:
+    with _cache_lock:
+        now: float = time.time()
+        
+        for cache_name, cache in _caches.items():
+            if cache_name == 'season_episodes':
+                _cleanup_season_episodes_cache(now)
+            elif isinstance(cache, dict) and 'time' in cache and 'ttl' in cache:
+                if cache['data'] is not None and (now - cache['time']) > cache['ttl']:
+                    cache['data'] = None
+                    cache['time'] = 0.0
+                    log(f"Cleaned up expired cache: {cache_name}", log_level=xbmc.LOGDEBUG)
+
+
+def _cleanup_season_episodes_cache(now: float) -> None:
+    season_episodes = _caches.get('season_episodes')
+    if not isinstance(season_episodes, dict):
+        return
+
+    expired_keys: List[str] = []
+    for key, entry in season_episodes.items():
+        if isinstance(entry, dict) and 'time' in entry:
+            if (now - entry['time']) > playlist_cache_expiry:
+                expired_keys.append(key)
+
+    for key in expired_keys:
+        del season_episodes[key]
+        log(f"Cleaned up expired season_episodes cache entry: {key}", log_level=xbmc.LOGDEBUG)
+
+    while len(season_episodes) > MAX_SEASON_EPISODES_CACHE_SIZE:
+        oldest_key = min(season_episodes.keys(), 
+                        key=lambda k: season_episodes[k].get('time', 0.0))
+        del season_episodes[oldest_key]
+        log(f"Cleaned up oldest season_episodes cache entry to limit size: {oldest_key}", log_level=xbmc.LOGDEBUG)
+
+
+def clear_all_caches() -> None:
+    with _cache_lock:
+        for cache_name in _caches:
+            if cache_name == 'season_episodes':
+                _caches['season_episodes'] = {}
+            else:
+                _caches[cache_name] = {'data': None, 'time': 0.0, 'ttl': _caches[cache_name].get('ttl', 3600.0)}
+        log("All caches cleared", log_level=xbmc.LOGDEBUG)
+
+
+def log(msg: str, prefix: str = "[SkipIntro]", log_level: int = xbmc.LOGINFO) -> None:
+    xbmc.log(f"{prefix} {msg}", log_level)
+
+
+def show_notification(title: str, message: str, duration: int = 3000) -> None:
+    try:
+        icon_path = os.path.join(ADDON_PATH, "icon.png")
+        xbmc.executebuiltin(f'Notification({title}, {message}, {duration}, {icon_path})')
+    except Exception as e:
+        log(f"Error showing notification: {e}", log_level=xbmc.LOGWARNING)
+
+
+def log_exception(e: Exception, context: str = "") -> None:
+    import traceback
+    error_msg: str = f"Exception in {context}: {type(e).__name__}: {e}"
+    log(error_msg, log_level=xbmc.LOGERROR)
+    log(f"Traceback: {traceback.format_exc()}", log_level=xbmc.LOGERROR)
 
 
 class SettingsManager:
-    def __init__(self):
+    def __init__(self) -> None:
         self._addon = ADDON
-        self._settings_cache = {}
-        self._cache_time = {}
-        self._cache_ttl = 5.0
+        self._settings_cache: Dict[str, str] = {}
+        self._cache_time: Dict[str, float] = {}
+        self._cache_ttl: float = 5.0
 
-    def _get_setting(self, setting_id, default=None):
-        now = time.time()
+    def _get_setting(self, setting_id: str, default: Optional[str] = None) -> Optional[str]:
+        now: float = time.time()
         if setting_id in self._settings_cache:
-            cache_time = self._cache_time.get(setting_id, 0)
+            cache_time: float = self._cache_time.get(setting_id, 0.0)
             if now - cache_time < self._cache_ttl:
                 return self._settings_cache[setting_id]
 
         try:
-            value = self._addon.getSetting(setting_id)
+            value: str = self._addon.getSetting(setting_id)
             self._settings_cache[setting_id] = value
             self._cache_time[setting_id] = now
             return value
         except Exception as e:
-            log(f"Error getting setting '{setting_id}': {e}")
+            log(f"Error getting setting '{setting_id}': {e}", log_level=xbmc.LOGWARNING)
             return default
 
     @property
-    def autofill_playlist_on_play(self):
-        value = self._get_setting('autofill_playlist_on_play')
+    def autofill_playlist_on_play(self) -> bool:
+        value: Optional[str] = self._get_setting('autofill_playlist_on_play')
         return value == 'true'
 
     @property
-    def debug_mode(self):
-        value = self._get_setting('debug_mode')
+    def debug_mode(self) -> bool:
+        value: Optional[str] = self._get_setting('debug_mode')
         return value == 'true'
 
-    def get_string(self, string_id):
+    def get_string(self, string_id: int) -> str:
         try:
             return self._addon.getLocalizedString(string_id)
         except Exception as e:
-            log(f"Error getting string {string_id}: {e}")
+            log(f"Error getting string {string_id}: {e}", log_level=xbmc.LOGWARNING)
             return f"[String {string_id}]"
 
-    def invalidate_cache(self):
+    def invalidate_cache(self) -> None:
         self._settings_cache.clear()
         self._cache_time.clear()
 
-    def set_setting(self, setting_id, value):
+    def set_setting(self, setting_id: str, value: Union[str, bool, int, float]) -> bool:
         try:
+            str_value: str
             if isinstance(value, bool):
-                value = 'true' if value else 'false'
+                str_value = 'true' if value else 'false'
             elif isinstance(value, (int, float)):
-                value = str(value)
-            self._addon.setSetting(setting_id, value)
+                str_value = str(value)
+            else:
+                str_value = str(value)
+            self._addon.setSetting(setting_id, str_value)
             self.invalidate_cache()
             return True
         except Exception as e:
-            log(f"Error setting '{setting_id}': {e}")
+            log(f"Error setting '{setting_id}': {e}", log_level=xbmc.LOGWARNING)
             return False
 
 
 SETTINGS = SettingsManager()
 
 
-def _get_cached_data(cache_name, force_reload=False):
+def _get_cached_data(cache_name: str, force_reload: bool = False) -> Tuple[Any, bool]:
     with _cache_lock:
         cache = _caches.get(cache_name)
         if not cache:
             return None, False
 
-        now = time.time()
-        if not force_reload and cache['data'] is not None and (now - cache['time']) < cache.get('ttl', 3600):
+        now: float = time.time()
+        if not force_reload and cache['data'] is not None and (now - cache['time']) < cache.get('ttl', 3600.0):
             return cache['data'], True
 
         return None, False
 
 
-def _set_cached_data(cache_name, data):
+def _set_cached_data(cache_name: str, data: Any) -> None:
     with _cache_lock:
         cache = _caches.get(cache_name)
         if cache:
@@ -118,7 +190,7 @@ def _set_cached_data(cache_name, data):
             cache['time'] = time.time()
 
 
-def load_skip_data(force_reload=False):
+def load_skip_data(force_reload: bool = False) -> Dict[str, Any]:
     cached, hit = _get_cached_data('skip_data', force_reload)
     if hit:
         return cached
@@ -129,17 +201,17 @@ def load_skip_data(force_reload=False):
 
     try:
         with open(SKIP_DATA_FILE, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+            data: Dict[str, Any] = json.load(f)
             _set_cached_data('skip_data', data)
             return data
     except Exception as e:
-        log(f"Error loading skip data: {e}")
+        log(f"Error loading skip data: {e}", log_level=xbmc.LOGWARNING)
         return {}
 
 
-def save_skip_data(data):
-    temp_file = SKIP_DATA_FILE + ".tmp"
-    backup_file = SKIP_DATA_FILE + ".bak"
+def save_skip_data(data: Dict[str, Any]) -> None:
+    temp_file: str = SKIP_DATA_FILE + ".tmp"
+    backup_file: str = SKIP_DATA_FILE + ".bak"
 
     try:
         if os.path.exists(SKIP_DATA_FILE):
@@ -158,11 +230,11 @@ def save_skip_data(data):
 
         _set_cached_data('skip_data', data)
     except Exception as e:
-        log(f"Error saving skip data: {e}")
+        log(f"Error saving skip data: {e}", log_level=xbmc.LOGWARNING)
         if os.path.exists(temp_file):
             try:
                 os.remove(temp_file)
-            except:
+            except Exception:
                 pass
         if os.path.exists(backup_file):
             try:
@@ -170,17 +242,18 @@ def save_skip_data(data):
                     os.remove(SKIP_DATA_FILE)
                 os.rename(backup_file, SKIP_DATA_FILE)
             except Exception as backup_e:
-                log(f"Failed to restore backup: {backup_e}")
+                log(f"Failed to restore backup: {backup_e}", log_level=xbmc.LOGERROR)
 
 
-def delete_all_skip_points():
+def delete_all_skip_points() -> None:
     if os.path.exists(SKIP_DATA_FILE):
         os.remove(SKIP_DATA_FILE)
     _set_cached_data('skip_data', {})
 
 
-def jsonrpc_call(method, params=None, request_id=None):
-    query = {
+def jsonrpc_call(method: str, params: Optional[Dict[str, Any]] = None, 
+                 request_id: Optional[Union[str, int]] = None) -> Any:
+    query: Dict[str, Any] = {
         "jsonrpc": "2.0",
         "method": method,
         "id": request_id or method,
@@ -189,13 +262,13 @@ def jsonrpc_call(method, params=None, request_id=None):
         query["params"] = params
 
     try:
-        response = json.loads(xbmc.executeJSONRPC(json.dumps(query)))
+        response: Any = json.loads(xbmc.executeJSONRPC(json.dumps(query)))
     except Exception as e:
-        log(f"JSON-RPC call failed for {method}: {e}", xbmc.LOGERROR)
+        log(f"JSON-RPC call failed for {method}: {e}", log_level=xbmc.LOGERROR)
         return None
 
     if isinstance(response, dict) and "error" in response:
-        log(f"JSON-RPC error for {method}: {response.get('error')}", xbmc.LOGWARNING)
+        log(f"JSON-RPC error for {method}: {response.get('error')}", log_level=xbmc.LOGWARNING)
         return None
 
     return response.get("result") if isinstance(response, dict) else None
