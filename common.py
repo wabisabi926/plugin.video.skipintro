@@ -9,6 +9,8 @@ import threading
 import xbmcaddon
 import shutil
 from typing import Any, Dict, List, Optional, Tuple, Union, Callable
+from concurrent.futures import ThreadPoolExecutor, Future
+from functools import wraps
 
 ADDON_ID: str = 'plugin.video.skipintro'
 ADDON = xbmcaddon.Addon(ADDON_ID)
@@ -38,6 +40,36 @@ _caches: Dict[str, Any] = {
 }
 playlist_cache_expiry: int = 3600
 MAX_SEASON_EPISODES_CACHE_SIZE: int = 50
+
+_thread_pool_executor: Optional[ThreadPoolExecutor] = None
+_thread_pool_lock = threading.Lock()
+
+
+def get_thread_pool() -> ThreadPoolExecutor:
+    global _thread_pool_executor
+    with _thread_pool_lock:
+        if _thread_pool_executor is None or _thread_pool_executor._shutdown:
+            _thread_pool_executor = ThreadPoolExecutor(
+                max_workers=2,
+                thread_name_prefix="SkipIntro-"
+            )
+    return _thread_pool_executor
+
+
+def run_async(func: Callable) -> Callable[..., Future]:
+    @wraps(func)
+    def wrapper(*args, **kwargs) -> Future:
+        executor = get_thread_pool()
+        return executor.submit(func, *args, **kwargs)
+    return wrapper
+
+
+def shutdown_thread_pool(wait: bool = True) -> None:
+    global _thread_pool_executor
+    with _thread_pool_lock:
+        if _thread_pool_executor is not None:
+            _thread_pool_executor.shutdown(wait=wait)
+            _thread_pool_executor = None
 
 
 def cleanup_expired_caches() -> None:
@@ -272,6 +304,40 @@ def jsonrpc_call(method: str, params: Optional[Dict[str, Any]] = None,
         return None
 
     return response.get("result") if isinstance(response, dict) else None
+
+
+def jsonrpc_batch_call(calls: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    if not calls:
+        return []
+
+    batch = []
+    for idx, call in enumerate(calls):
+        request: Dict[str, Any] = {
+            "jsonrpc": "2.0",
+            "method": call["method"],
+            "id": idx,
+        }
+        if "params" in call and call["params"] is not None:
+            request["params"] = call["params"]
+        batch.append(request)
+
+    try:
+        responses: Any = json.loads(xbmc.executeJSONRPC(json.dumps(batch)))
+        if not isinstance(responses, list):
+            log(f"JSON-RPC batch call returned non-list response: {responses}", log_level=xbmc.LOGERROR)
+            return []
+
+        results: List[Dict[str, Any]] = []
+        for response in responses:
+            if isinstance(response, dict):
+                if "error" in response:
+                    req_id = response.get("id")
+                    log(f"JSON-RPC batch error for request {req_id}: {response.get('error')}", log_level=xbmc.LOGWARNING)
+                results.append(response)
+        return results
+    except Exception as e:
+        log(f"JSON-RPC batch call failed: {e}", log_level=xbmc.LOGERROR)
+        return []
 
 
 def get_current_episode_id(tvshowid, season, episode, current_file=None):
