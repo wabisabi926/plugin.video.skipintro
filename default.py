@@ -8,11 +8,12 @@ import xbmcgui
 
 from common import (
     ADDON_PATH, load_skip_data, save_skip_data, get_current_tvshow_info, log, 
-    jsonrpc_call, SETTINGS, delete_all_skip_points
+    jsonrpc_call, SETTINGS, delete_all_skip_points,
+    DEFAULT_NOTIFICATION_DURATION
 )
 
 
-def show_notification(message, duration=2000):
+def show_notification(message, duration=DEFAULT_NOTIFICATION_DURATION):
     xbmc.executebuiltin(
         'Notification(%s, %s, %d, %s)' % (
             SETTINGS.get_string(32027),
@@ -26,10 +27,20 @@ def show_notification(message, duration=2000):
 def get_current_playback_time():
     try:
         player = xbmc.Player()
+        if not player.isPlayingVideo():
+            log("get_current_playback_time: No video is playing")
+            return 0, 0
+        
         current_time = player.getTime()
         total_time = player.getTotalTime()
+        
+        if current_time < 0 or total_time <= 0:
+            log(f"get_current_playback_time: Invalid time values - current: {current_time}, total: {total_time}")
+            return 0, 0
+        
         return current_time, total_time
-    except Exception:
+    except Exception as e:
+        log(f"get_current_playback_time error: {e}")
         return 0, 0
 
 

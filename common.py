@@ -23,6 +23,10 @@ MAX_PLAYLIST_ITEMS_AFTER = 50
 MAX_DELETE_LOWER_EPISODES_BELOW = 10
 PLAYLIST_MUTATION_DELAY_MS = 300
 
+PLAYBACK_STOP_TIMEOUT_MS = 5000
+PLAYBACK_STOP_INTERVAL_MS = 100
+DEFAULT_NOTIFICATION_DURATION = 2000
+
 _cache_lock = threading.Lock()
 _caches = {
     'skip_data': {'data': None, 'time': 0, 'ttl': 2.0},
@@ -32,8 +36,35 @@ _caches = {
 playlist_cache_expiry = 3600
 
 
-def log(msg, prefix="[SkipIntro]"):
-    xbmc.log(f"{prefix} {msg}", xbmc.LOGINFO)
+def log(msg, prefix="[SkipIntro]", log_level=xbmc.LOGINFO):
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+    xbmc.log(f"{timestamp} {prefix} {msg}", log_level)
+
+
+def log_error(msg, prefix="[SkipIntro]"):
+    log(msg, prefix, xbmc.LOGERROR)
+
+
+def log_warning(msg, prefix="[SkipIntro]"):
+    log(msg, prefix, xbmc.LOGWARNING)
+
+
+def log_debug(msg, prefix="[SkipIntro]"):
+    if SETTINGS.debug_mode:
+        log(msg, prefix, xbmc.LOGDEBUG)
+
+
+def catch_exceptions(default_return=None, log_prefix="[SkipIntro]"):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                log(f"Error in {func.__name__}: {e}", log_prefix, xbmc.LOGERROR)
+                return default_return
+        return wrapper
+    return decorator
 
 
 class SettingsManager:
@@ -265,7 +296,7 @@ def get_next_episode_from_library(tvshowid, current_file, include_watched=True, 
             return None
 
         tvshowid = int(tvshowid)
-        if tvshowid == -1:
+        if tvshowid <= 0:
             return None
 
         result = jsonrpc_call(
@@ -710,24 +741,29 @@ class State:
 
     def __init__(self):
         self.__dict__ = self._shared_state
-        self.playing_next = False
-        self.track = True
-        self.pause = False
-
-    def set_playing_next(self, value):
-        with self._state_lock:
-            self.playing_next = value
-            log(f"State: playing_next set to {value}")
-
-    def get_playing_next(self):
-        with self._state_lock:
-            return self.playing_next
-
-    def reset(self):
-        with self._state_lock:
+        if 'playing_next' not in self._shared_state:
             self.playing_next = False
             self.track = True
             self.pause = False
+
+    @property
+    def playing_next(self):
+        with self._state_lock:
+            return self._shared_state.get('playing_next', False)
+
+    @playing_next.setter
+    def playing_next(self, value):
+        with self._state_lock:
+            self._shared_state['playing_next'] = value
+            log(f"State: playing_next set to {value}")
+
+    def reset(self):
+        with self._state_lock:
+            self._shared_state.update({
+                'playing_next': False,
+                'track': True,
+                'pause': False
+            })
 
 
 class EpisodePlaylistFixer:
