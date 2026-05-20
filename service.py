@@ -12,7 +12,8 @@ from common import (
     is_next_episode_available_in_playlist, get_active_video_playlist_state,
     get_next_file_in_directory, play_file, extract_media_info_from_filename,
     State, mark_current_episode_as_watched, get_season_episode_from_state,
-    SETTINGS
+    SETTINGS,
+    PLAYBACK_STOP_TIMEOUT_MS, PLAYBACK_STOP_INTERVAL_MS
 )
 
 
@@ -114,8 +115,8 @@ class PlayerMonitor(xbmc.Player):
         autofill_playlist_for_current_video()
 
     def onPlayBackEnded(self):
-        if self.state.get_playing_next():
-            self.state.set_playing_next(False)
+        if self.state.playing_next:
+            self.state.playing_next = False
         else:
             self.state.reset()
             self.current_outro_time = None
@@ -255,7 +256,7 @@ def execute_next_episode(countdown_state):
     shared_state = State()
 
     def try_play_next():
-        shared_state.set_playing_next(True)
+        shared_state.playing_next = True
         xbmc.executebuiltin("PlayerControl(Next)")
 
     try:
@@ -283,7 +284,7 @@ def execute_next_episode(countdown_state):
             )
 
             if next_episode and play_episode_from_library(next_episode):
-                shared_state.set_playing_next(True)
+                shared_state.playing_next = True
                 countdown_state.active = False
                 return
 
@@ -291,8 +292,8 @@ def execute_next_episode(countdown_state):
             current_file = state.get("file", "")
             next_file = get_next_file_in_directory(current_file)
             if next_file:
-                shared_state.set_playing_next(True)
-                stop_playback_and_wait(timeout_ms=5000, interval_ms=100)
+                shared_state.playing_next = True
+                stop_playback_and_wait(timeout_ms=PLAYBACK_STOP_TIMEOUT_MS, interval_ms=PLAYBACK_STOP_INTERVAL_MS)
                 if play_file(next_file):
                     countdown_state.active = False
                     return
