@@ -8,6 +8,10 @@ import time
 import threading
 import xbmcaddon
 import shutil
+from typing import Any, Dict, List, Optional, Tuple, Union, Callable, TypeVar
+from functools import wraps
+
+T = TypeVar('T')
 
 ADDON_ID = 'plugin.video.skipintro'
 ADDON = xbmcaddon.Addon(ADDON_ID)
@@ -36,28 +40,28 @@ _caches = {
 playlist_cache_expiry = 3600
 
 
-def log(msg, prefix="[SkipIntro]", log_level=xbmc.LOGINFO):
+def log(msg: str, prefix: str = "[SkipIntro]", log_level: int = xbmc.LOGINFO) -> None:
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
     xbmc.log(f"{timestamp} {prefix} {msg}", log_level)
 
 
-def log_error(msg, prefix="[SkipIntro]"):
+def log_error(msg: str, prefix: str = "[SkipIntro]") -> None:
     log(msg, prefix, xbmc.LOGERROR)
 
 
-def log_warning(msg, prefix="[SkipIntro]"):
+def log_warning(msg: str, prefix: str = "[SkipIntro]") -> None:
     log(msg, prefix, xbmc.LOGWARNING)
 
 
-def log_debug(msg, prefix="[SkipIntro]"):
+def log_debug(msg: str, prefix: str = "[SkipIntro]") -> None:
     if SETTINGS.debug_mode:
         log(msg, prefix, xbmc.LOGDEBUG)
 
 
-def catch_exceptions(default_return=None, log_prefix="[SkipIntro]"):
-    def decorator(func):
+def catch_exceptions(default_return: Any = None, log_prefix: str = "[SkipIntro]") -> Callable:
+    def decorator(func: Callable) -> Callable:
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             try:
                 return func(*args, **kwargs)
             except Exception as e:
@@ -68,21 +72,21 @@ def catch_exceptions(default_return=None, log_prefix="[SkipIntro]"):
 
 
 class SettingsManager:
-    def __init__(self):
+    def __init__(self) -> None:
         self._addon = ADDON
-        self._settings_cache = {}
-        self._cache_time = {}
-        self._cache_ttl = 5.0
+        self._settings_cache: Dict[str, str] = {}
+        self._cache_time: Dict[str, float] = {}
+        self._cache_ttl: float = 5.0
 
-    def _get_setting(self, setting_id, default=None):
-        now = time.time()
+    def _get_setting(self, setting_id: str, default: Optional[str] = None) -> Optional[str]:
+        now: float = time.time()
         if setting_id in self._settings_cache:
-            cache_time = self._cache_time.get(setting_id, 0)
+            cache_time: float = self._cache_time.get(setting_id, 0.0)
             if now - cache_time < self._cache_ttl:
                 return self._settings_cache[setting_id]
 
         try:
-            value = self._addon.getSetting(setting_id)
+            value: str = self._addon.getSetting(setting_id)
             self._settings_cache[setting_id] = value
             self._cache_time[setting_id] = now
             return value
@@ -91,33 +95,36 @@ class SettingsManager:
             return default
 
     @property
-    def autofill_playlist_on_play(self):
-        value = self._get_setting('autofill_playlist_on_play')
+    def autofill_playlist_on_play(self) -> bool:
+        value: Optional[str] = self._get_setting('autofill_playlist_on_play')
         return value == 'true'
 
     @property
-    def debug_mode(self):
-        value = self._get_setting('debug_mode')
+    def debug_mode(self) -> bool:
+        value: Optional[str] = self._get_setting('debug_mode')
         return value == 'true'
 
-    def get_string(self, string_id):
+    def get_string(self, string_id: int) -> str:
         try:
             return self._addon.getLocalizedString(string_id)
         except Exception as e:
             log(f"Error getting string {string_id}: {e}")
             return f"[String {string_id}]"
 
-    def invalidate_cache(self):
+    def invalidate_cache(self) -> None:
         self._settings_cache.clear()
         self._cache_time.clear()
 
-    def set_setting(self, setting_id, value):
+    def set_setting(self, setting_id: str, value: Union[bool, int, float, str]) -> bool:
         try:
+            str_value: str
             if isinstance(value, bool):
-                value = 'true' if value else 'false'
+                str_value = 'true' if value else 'false'
             elif isinstance(value, (int, float)):
-                value = str(value)
-            self._addon.setSetting(setting_id, value)
+                str_value = str(value)
+            else:
+                str_value = str(value)
+            self._addon.setSetting(setting_id, str_value)
             self.invalidate_cache()
             return True
         except Exception as e:
@@ -125,31 +132,31 @@ class SettingsManager:
             return False
 
 
-SETTINGS = SettingsManager()
+SETTINGS: SettingsManager = SettingsManager()
 
 
-def _get_cached_data(cache_name, force_reload=False):
+def _get_cached_data(cache_name: str, force_reload: bool = False) -> Tuple[Any, bool]:
     with _cache_lock:
-        cache = _caches.get(cache_name)
+        cache: Optional[Dict[str, Any]] = _caches.get(cache_name)
         if not cache:
             return None, False
 
-        now = time.time()
-        if not force_reload and cache['data'] is not None and (now - cache['time']) < cache.get('ttl', 3600):
+        now: float = time.time()
+        if not force_reload and cache['data'] is not None and (now - cache['time']) < cache.get('ttl', 3600.0):
             return cache['data'], True
 
         return None, False
 
 
-def _set_cached_data(cache_name, data):
+def _set_cached_data(cache_name: str, data: Any) -> None:
     with _cache_lock:
-        cache = _caches.get(cache_name)
+        cache: Optional[Dict[str, Any]] = _caches.get(cache_name)
         if cache:
             cache['data'] = data
             cache['time'] = time.time()
 
 
-def load_skip_data(force_reload=False):
+def load_skip_data(force_reload: bool = False) -> Dict[str, Any]:
     cached, hit = _get_cached_data('skip_data', force_reload)
     if hit:
         return cached
@@ -160,7 +167,7 @@ def load_skip_data(force_reload=False):
 
     try:
         with open(SKIP_DATA_FILE, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+            data: Dict[str, Any] = json.load(f)
             _set_cached_data('skip_data', data)
             return data
     except Exception as e:
@@ -168,9 +175,9 @@ def load_skip_data(force_reload=False):
         return {}
 
 
-def save_skip_data(data):
-    temp_file = SKIP_DATA_FILE + ".tmp"
-    backup_file = SKIP_DATA_FILE + ".bak"
+def save_skip_data(data: Dict[str, Any]) -> None:
+    temp_file: str = SKIP_DATA_FILE + ".tmp"
+    backup_file: str = SKIP_DATA_FILE + ".bak"
 
     try:
         if os.path.exists(SKIP_DATA_FILE):
@@ -204,14 +211,14 @@ def save_skip_data(data):
                 log(f"Failed to restore backup: {backup_e}")
 
 
-def delete_all_skip_points():
+def delete_all_skip_points() -> None:
     if os.path.exists(SKIP_DATA_FILE):
         os.remove(SKIP_DATA_FILE)
     _set_cached_data('skip_data', {})
 
 
-def jsonrpc_call(method, params=None, request_id=None):
-    query = {
+def jsonrpc_call(method: str, params: Optional[Dict[str, Any]] = None, request_id: Optional[Union[int, str]] = None) -> Optional[Dict[str, Any]]:
+    query: Dict[str, Any] = {
         "jsonrpc": "2.0",
         "method": method,
         "id": request_id or method,
@@ -736,10 +743,10 @@ def get_current_tvshow_info():
 
 
 class State:
-    _shared_state = {}
-    _state_lock = threading.Lock()
+    _shared_state: Dict[str, bool] = {}
+    _state_lock: threading.Lock = threading.Lock()
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.__dict__ = self._shared_state
         if 'playing_next' not in self._shared_state:
             self.playing_next = False
@@ -747,17 +754,17 @@ class State:
             self.pause = False
 
     @property
-    def playing_next(self):
+    def playing_next(self) -> bool:
         with self._state_lock:
             return self._shared_state.get('playing_next', False)
 
     @playing_next.setter
-    def playing_next(self, value):
+    def playing_next(self, value: bool) -> None:
         with self._state_lock:
             self._shared_state['playing_next'] = value
             log(f"State: playing_next set to {value}")
 
-    def reset(self):
+    def reset(self) -> None:
         with self._state_lock:
             self._shared_state.update({
                 'playing_next': False,
