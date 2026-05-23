@@ -271,7 +271,7 @@ addon_data/plugin.video.skipintro/skip_intro_data.json
 ### Q6：如何重置所有记录？
 
 删除数据文件即可：
-1. 进入插件，设置 - 常规 - 删除所有记录点，确定
+1. 在 Kodi 中访问：设置 → 插件 → 我的插件 → 程序插件 → Skip Intro → 设置 → 常规 → 删除所有记录点，确定
 2. 重启 Kodi
 
 ---
