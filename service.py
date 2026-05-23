@@ -110,6 +110,9 @@ class PlayerMonitor(xbmc.Player):
 
     def onAVStarted(self):
         self.cancel_skip = False
+        self.state.playing_next = False
+        self.current_outro_time = None  # 重置片尾时间
+        self.outro_triggered = False  # 重置触发标志
         self.check_intro()
         self.retry_update_outro()
         autofill_playlist_for_current_video()

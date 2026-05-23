@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.3.7-blue.svg)](https://github.com/wabisabi926/plugin.video.skipintro)
+[![Version](https://img.shields.io/badge/version-1.3.8-blue.svg)](https://github.com/wabisabi926/plugin.video.skipintro)
 [![License](https://img.shields.io/badge/license-NC--3.0-green.svg)](LICENSE.txt)
 [![Platform](https://img.shields.io/badge/platform-Kodi-orange.svg)](https://kodi.tv/)
 
@@ -343,6 +343,9 @@ RunScript(plugin.video.skipintro, ?mode=delete_skip_point)
 ---
 
 ## 更新日志
+
+### v1.3.8 (2026-05)
+- 🐛 **修复连续播放问题**：修复播放下一集时无法再次自动播放下一集的问题
 
 ### v1.3.7 (2026-05)
 - ✅ **日志时间戳**：每条日志添加 `YYYY-MM-DD HH:MM:SS` 时间戳，便于问题追踪
