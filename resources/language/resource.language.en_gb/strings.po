@@ -114,31 +114,6 @@ msgid "Playlist Settings"
 msgstr "Playlist Settings"
 
 #: default.py
-msgctxt "#32020"
-msgid "Failed to add setting, please enable it manually"
-msgstr "Failed to add setting, please enable it manually"
-
-#: default.py
-msgctxt "#32021"
-msgid "Uncategorized"
-msgstr "Uncategorized"
-
-#: default.py
-msgctxt "#32022"
-msgid "TV Shows and Episodes"
-msgstr "TV Shows and Episodes"
-
-#: default.py
-msgctxt "#32023"
-msgid "Skip intro/outro requires Settings > Player > Auto play next ({0}).\nDo you want to add this setting and exit, then manually replay?"
-msgstr "Skip intro/outro requires Settings > Player > Auto play next ({0}).\nDo you want to add this setting and exit, then manually replay?"
-
-#: default.py
-msgctxt "#32024"
-msgid "Auto play next not enabled"
-msgstr "Auto play next not enabled"
-
-#: default.py
 msgctxt "#32025"
 msgid "OK"
 msgstr "OK"
@@ -173,12 +148,22 @@ msgctxt "#32031"
 msgid "Logging"
 msgstr "Logging"
 
+#: service.py
+msgctxt "#32032"
+msgid "No more episodes available"
+msgstr "No more episodes available"
+
 #: settings.xml
 msgctxt "#32033"
 msgid "Delete all skip points"
 msgstr "Delete all skip points"
 
-#: service.py
-msgctxt "#32032"
-msgid "No more episodes available"
-msgstr "No more episodes available"
+#: default.py
+msgctxt "#32034"
+msgid "Are you sure you want to delete all skip points? This action cannot be undone."
+msgstr "Are you sure you want to delete all skip points? This action cannot be undone."
+
+#: default.py
+msgctxt "#32035"
+msgid "All skip points deleted"
+msgstr "All skip points deleted"

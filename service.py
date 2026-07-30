@@ -1,31 +1,23 @@
 # -*- coding: utf-8 -*-
 import os
-import xbmc
-import xbmcgui
 import time
 import threading
+from typing import Optional, Tuple
+
+import xbmc
+import xbmcgui
 
 from common import (
-    ADDON_PATH, load_skip_data, get_current_tvshow_info, 
-    autofill_playlist_for_current_video, log, 
+    ADDON_PATH, load_skip_data, get_current_tvshow_info,
+    autofill_playlist_for_current_video, log, log_debug,
     get_next_episode_from_library, play_episode_from_library,
     is_next_episode_available_in_playlist, get_active_video_playlist_state,
     get_next_file_in_directory, play_file, extract_media_info_from_filename,
     State, mark_current_episode_as_watched, get_season_episode_from_state,
-    SETTINGS,
-    PLAYBACK_STOP_TIMEOUT_MS, PLAYBACK_STOP_INTERVAL_MS
+    SETTINGS, PLAYBACK_STOP_TIMEOUT_MS, PLAYBACK_STOP_INTERVAL_MS,
+    show_notification, COUNTDOWN_SECONDS, OUTRO_RESET_BUFFER, MAIN_LOOP_INTERVAL,
+    DEFAULT_NOTIFICATION_DURATION, NOTIFICATION_DURATION_LONG
 )
-
-
-def show_notification(title, message, duration=3000):
-    try:
-        xbmc.executebuiltin(
-            'Notification(%s, %s, %d, %s)' % (
-                title, message, duration, os.path.join(ADDON_PATH, "icon.png")
-            )
-        )
-    except Exception as e:
-        log(f"Error showing notification: {e}")
 
 
 class SkipCountdownWindow(xbmcgui.WindowXMLDialog):
@@ -59,7 +51,7 @@ class SkipCountdownWindow(xbmcgui.WindowXMLDialog):
         elif action_id == 12:
             xbmc.executebuiltin("PlayerControl(Play)")
 
-    def update_text(self, text):
+    def update_text(self, text: str) -> None:
         if not self.is_ready:
             return
         try:
@@ -67,21 +59,21 @@ class SkipCountdownWindow(xbmcgui.WindowXMLDialog):
             if ctrl:
                 ctrl.setLabel(text)
         except Exception as e:
-            log(f"Error updating countdown text: {e}")
+            log(f"Error updating countdown text: {e}", xbmc.LOGERROR)
 
 
 class CountdownState:
     def __init__(self):
-        self.window = None
-        self.thread = None
-        self.active = False
-        self.remaining = 0.0
+        self.window: Optional[SkipCountdownWindow] = None
+        self.thread: Optional[threading.Thread] = None
+        self.active: bool = False
+        self.remaining: float = 0.0
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         if self.window:
             self.window.close()
             if self.thread and self.thread.is_alive():
-                self.thread.join()
+                self.thread.join(timeout=1.0)
         self.window = None
         self.thread = None
         self.active = False
@@ -90,29 +82,30 @@ class CountdownState:
 class PlayerMonitor(xbmc.Player):
     def __init__(self):
         xbmc.Player.__init__(self)
-        self.current_outro_time = None
-        self.outro_triggered = False
-        self.cancel_skip = False
-        self.state = State()
-        self._cached_playing_state = None
-        self._state_cache_time = 0
-        self._state_cache_ttl = 0.5
+        self.current_outro_time: Optional[float] = None
+        self.outro_triggered: bool = False
+        self.cancel_skip: bool = False
+        self.state: State = State()
+        self._cached_playing_state: Optional[bool] = None
+        self._state_cache_time: float = 0
+        self._state_cache_ttl: float = 0.5
 
-    def is_video_playing(self):
+    def is_video_playing(self) -> bool:
         now = time.time()
         if now - self._state_cache_time > self._state_cache_ttl:
             try:
                 self._cached_playing_state = self.isPlayingVideo()
                 self._state_cache_time = now
-            except Exception:
+            except Exception as e:
+                log_debug(f"isPlayingVideo check failed: {e}")
                 self._cached_playing_state = False
         return self._cached_playing_state or False
 
     def onAVStarted(self):
         self.cancel_skip = False
         self.state.playing_next = False
-        self.current_outro_time = None  # 重置片尾时间
-        self.outro_triggered = False  # 重置触发标志
+        self.current_outro_time = None
+        self.outro_triggered = False
         self.check_intro()
         self.retry_update_outro()
         autofill_playlist_for_current_video()
@@ -136,7 +129,7 @@ class PlayerMonitor(xbmc.Player):
     def onPlayBackResumed(self):
         self.state.pause = False
 
-    def retry_update_outro(self, max_retries=10, delay_ms=1000):
+    def retry_update_outro(self, max_retries: int = 10, delay_ms: int = 1000) -> None:
         for i in range(max_retries):
             try:
                 total_time = self.getTotalTime()
@@ -144,11 +137,11 @@ class PlayerMonitor(xbmc.Player):
                     self.update_outro_info()
                     return
             except Exception as e:
-                log(f"retry_update_outro: error getting totalTime: {e}")
+                log(f"retry_update_outro: error getting totalTime: {e}", xbmc.LOGWARNING)
             xbmc.sleep(delay_ms)
-        log("retry_update_outro: failed to get totalTime after max retries")
+        log("retry_update_outro: failed to get totalTime after max retries", xbmc.LOGWARNING)
 
-    def update_outro_info(self):
+    def update_outro_info(self) -> None:
         if not self.is_video_playing():
             return
 
@@ -177,13 +170,12 @@ class PlayerMonitor(xbmc.Player):
                             self.outro_triggered = False
                             self.cancel_skip = False
                 except Exception as e:
-                    log(f"Error calculating outro trigger: {e}")
-            else:
-                if self.current_outro_time is not None:
-                    self.current_outro_time = None
-                    self.outro_triggered = False
+                    log(f"Error calculating outro trigger: {e}", xbmc.LOGERROR)
+            elif self.current_outro_time is not None:
+                self.current_outro_time = None
+                self.outro_triggered = False
 
-    def check_intro(self):
+    def check_intro(self) -> None:
         if not self.is_video_playing():
             return
 
@@ -209,34 +201,34 @@ class PlayerMonitor(xbmc.Player):
             try:
                 current_time = self.getTime()
                 if current_time < skip_time:
-                    log(f"Auto skipping intro for {show_title} S{season}. Current: {current_time}, Target: {skip_time}")
+                    log_debug(f"Auto skipping intro for {show_title} S{season}. Current: {current_time}, Target: {skip_time}")
                     self.seekTime(skip_time)
 
                     season_num, episode_num = get_season_episode_from_state(source_type, state, season)
                     notification_text = SETTINGS.get_string(32000) % (season_num, episode_num)
                     show_notification(SETTINGS.get_string(32027), notification_text)
             except Exception as e:
-                log(f"Error during skip: {e}")
+                log(f"Error during skip: {e}", xbmc.LOGERROR)
 
 
-def create_countdown_window():
+def create_countdown_window() -> Tuple[Optional[SkipCountdownWindow], Optional[threading.Thread]]:
     try:
         window = SkipCountdownWindow("notification_overlay.xml", ADDON_PATH)
         thread = threading.Thread(target=window.doModal)
         thread.start()
         return window, thread
     except Exception as e:
-        log(f"Error creating countdown window: {e}")
+        log(f"Error creating countdown window: {e}", xbmc.LOGERROR)
         return None, None
 
 
-def stop_playback_and_wait(timeout_ms=3000, interval_ms=100):
+def stop_playback_and_wait(timeout_ms: int = PLAYBACK_STOP_TIMEOUT_MS, interval_ms: int = PLAYBACK_STOP_INTERVAL_MS) -> None:
     player = xbmc.Player()
     try:
         if player.isPlayingVideo():
             player.stop()
     except Exception as e:
-        log(f"stop_playback_and_wait: stop failed: {e}")
+        log(f"stop_playback_and_wait: stop failed: {e}", xbmc.LOGERROR)
         return
 
     start_time = time.time()
@@ -244,7 +236,8 @@ def stop_playback_and_wait(timeout_ms=3000, interval_ms=100):
         try:
             if not player.isPlayingVideo():
                 return
-        except Exception:
+        except Exception as e:
+            log_debug(f"Error checking playback state: {e}")
             return
         elapsed_ms = (time.time() - start_time) * 1000.0
         if elapsed_ms >= timeout_ms:
@@ -252,7 +245,7 @@ def stop_playback_and_wait(timeout_ms=3000, interval_ms=100):
         xbmc.sleep(interval_ms)
 
 
-def execute_next_episode(countdown_state):
+def execute_next_episode(countdown_state: CountdownState) -> None:
     countdown_state.cleanup()
 
     mark_current_episode_as_watched()
@@ -302,16 +295,17 @@ def execute_next_episode(countdown_state):
                     return
 
         try_play_next()
-    except Exception:
+    except Exception as e:
+        log(f"Error in execute_next_episode: {e}", xbmc.LOGERROR)
         try:
             try_play_next()
-        except Exception:
-            pass
+        except Exception as e2:
+            log(f"Fallback play failed: {e2}", xbmc.LOGERROR)
 
     countdown_state.active = False
 
 
-def has_next_episode():
+def has_next_episode() -> bool:
     state = get_active_video_playlist_state()
     if not state:
         return False
@@ -344,9 +338,9 @@ def has_next_episode():
     return False
 
 
-def handle_outro_enter(countdown_state):
+def handle_outro_enter(countdown_state: CountdownState) -> None:
     countdown_state.active = True
-    countdown_state.remaining = 6.0
+    countdown_state.remaining = COUNTDOWN_SECONDS
     countdown_state.window, countdown_state.thread = create_countdown_window()
 
     tvshow_id, show_title, season, source_type = get_current_tvshow_info()
@@ -363,22 +357,22 @@ def handle_outro_enter(countdown_state):
 
         show_notification(SETTINGS.get_string(32027), notification_text)
     except Exception as e:
-        log(f"Error showing outro notification: {e}")
+        log(f"Error showing outro notification: {e}", xbmc.LOGERROR)
 
     if countdown_state.window and countdown_state.window.is_ready:
         countdown_state.window.update_text(SETTINGS.get_string(32003) % int(countdown_state.remaining))
 
 
-def reset_outro_state(countdown_state, player):
+def reset_outro_state(countdown_state: CountdownState, player: PlayerMonitor) -> None:
     if player.cancel_skip:
         player.cancel_skip = False
     if countdown_state.active:
         countdown_state.active = False
-        log("Playback time before outro range. Resetting countdown.")
+        log("Playback time before outro range. Resetting countdown.", xbmc.LOGDEBUG)
     countdown_state.cleanup()
 
 
-def handle_countdown_cancellation(countdown_state, player):
+def handle_countdown_cancellation(countdown_state: CountdownState, player: PlayerMonitor) -> bool:
     if countdown_state.window and countdown_state.window.cancelled:
         player.cancel_skip = True
         show_notification(SETTINGS.get_string(32027), SETTINGS.get_string(32002))
@@ -387,7 +381,7 @@ def handle_countdown_cancellation(countdown_state, player):
     return False
 
 
-def update_countdown_ui(countdown_state, player):
+def update_countdown_ui(countdown_state: CountdownState, player: PlayerMonitor) -> None:
     if countdown_state.remaining <= 0:
         return
 
@@ -399,7 +393,7 @@ def update_countdown_ui(countdown_state, player):
         if handle_countdown_cancellation(countdown_state, player):
             return
     except Exception as e:
-        log(f"Error updating countdown window: {e}")
+        log(f"Error updating countdown window: {e}", xbmc.LOGERROR)
 
 
 if __name__ == '__main__':
@@ -412,7 +406,7 @@ if __name__ == '__main__':
 
     while not monitor.abortRequested():
         current_tick_time = time.time()
-        dt = current_tick_time - last_tick_time
+        dt = max(0.0, current_tick_time - last_tick_time)
         last_tick_time = current_tick_time
 
         if xbmcgui.Window(10000).getProperty("MFG.Reload") == "true":
@@ -425,12 +419,16 @@ if __name__ == '__main__':
                 current_time = player.getTime()
                 trigger_time = player.current_outro_time
 
-                if current_time < trigger_time - 6:
+                if current_time < trigger_time - OUTRO_RESET_BUFFER:
                     reset_outro_state(countdown_state, player)
                 elif not player.outro_triggered and not player.cancel_skip:
                     if not countdown_state.active:
                         if not has_next_episode():
-                            show_notification(SETTINGS.get_string(32027), SETTINGS.get_string(32032), duration=5000)
+                            show_notification(
+                                SETTINGS.get_string(32027),
+                                SETTINGS.get_string(32032),
+                                duration=NOTIFICATION_DURATION_LONG
+                            )
                             mark_current_episode_as_watched()
                             player.outro_triggered = True
                         else:
@@ -442,12 +440,13 @@ if __name__ == '__main__':
                         if countdown_state.remaining <= 0:
                             player.outro_triggered = True
                             execute_next_episode(countdown_state)
-            except Exception:
+            except Exception as e:
+                log(f"Error in outro handling loop: {e}", xbmc.LOGERROR)
                 countdown_state.cleanup()
 
         else:
             if countdown_state.active:
                 countdown_state.cleanup()
 
-        if monitor.waitForAbort(0.3):
+        if monitor.waitForAbort(MAIN_LOOP_INTERVAL):
             break

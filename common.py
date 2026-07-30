@@ -8,7 +8,8 @@ import time
 import threading
 import xbmcaddon
 import shutil
-from typing import Any, Dict, List, Optional, Tuple, Union, Callable, TypeVar
+from collections import OrderedDict
+from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union
 from functools import wraps
 
 T = TypeVar('T')
@@ -21,23 +22,59 @@ ADDON_DATA_PATH = xbmcvfs.translatePath(f"special://profile/addon_data/{ADDON_ID
 if not os.path.exists(ADDON_DATA_PATH):
     os.makedirs(ADDON_DATA_PATH)
 
+# File paths
 SKIP_DATA_FILE = os.path.join(ADDON_DATA_PATH, 'skip_intro_data.json')
+
+# Playlist configuration
 MAX_PLAYLIST_ITEMS_BEFORE = 10
 MAX_PLAYLIST_ITEMS_AFTER = 50
 MAX_DELETE_LOWER_EPISODES_BELOW = 10
 PLAYLIST_MUTATION_DELAY_MS = 300
 
+# Playback control
 PLAYBACK_STOP_TIMEOUT_MS = 5000
 PLAYBACK_STOP_INTERVAL_MS = 100
 DEFAULT_NOTIFICATION_DURATION = 2000
+NOTIFICATION_DURATION_LONG = 5000
 
+# Skip thresholds (percentage)
+SKIP_THRESHOLD_INTRO = 20
+SKIP_THRESHOLD_OUTRO = 80
+
+# Countdown configuration
+COUNTDOWN_SECONDS = 6
+OUTRO_RESET_BUFFER = 6
+MAIN_LOOP_INTERVAL = 0.3
+
+# Auto-fill configuration
+AUTOFILL_DELAY_SECONDS = 2
+SAVE_DEBOUNCE_MS = 500
+
+# Cache configuration
+CACHE_TTL_SKIP_DATA = 2.0
+CACHE_TTL_PLAYLIST_STATE = 0.4
+CACHE_TTL_SEASON_EPISODES = 3600
+MAX_SEASON_CACHE_ENTRIES = 100
+
+# Thread safety
 _cache_lock = threading.Lock()
-_caches = {
-    'skip_data': {'data': None, 'time': 0, 'ttl': 2.0},
-    'playlist_state': {'data': None, 'time': 0, 'ttl': 0.5},
-    'season_episodes': {}
+_state_lock = threading.Lock()
+_save_lock = threading.Lock()
+
+_caches: Dict[str, Any] = {
+    'skip_data': {'data': None, 'time': 0.0, 'ttl': CACHE_TTL_SKIP_DATA},
+    'playlist_state': {'data': None, 'time': 0.0, 'ttl': CACHE_TTL_PLAYLIST_STATE},
+    'season_episodes': OrderedDict()
 }
-playlist_cache_expiry = 3600
+
+# Auto-fill thread dedup
+_autofill_thread: Optional[threading.Thread] = None
+_autofill_event = threading.Event()
+
+# Save debounce
+_save_timer: Optional[threading.Timer] = None
+_save_pending_data: Optional[Dict[str, Any]] = None
+_save_pending_lock = threading.Lock()
 
 
 def log(msg: str, prefix: str = "[SkipIntro]", log_level: int = xbmc.LOGINFO) -> None:
@@ -58,6 +95,25 @@ def log_debug(msg: str, prefix: str = "[SkipIntro]") -> None:
         log(msg, prefix, xbmc.LOGDEBUG)
 
 
+def show_notification(title: str, message: str, duration: int = DEFAULT_NOTIFICATION_DURATION) -> None:
+    try:
+        xbmc.executebuiltin(
+            'Notification(%s, %s, %d, %s)' % (
+                title, message, duration, os.path.join(ADDON_PATH, "icon.png")
+            )
+        )
+    except Exception as e:
+        log(f"Failed to show notification: {e}", xbmc.LOGERROR)
+
+
+def _parse_season_data(raw: Any) -> Dict[str, Any]:
+    if isinstance(raw, (int, float)):
+        return {"intro": raw}
+    if isinstance(raw, dict):
+        return raw.copy()
+    return {}
+
+
 def catch_exceptions(default_return: Any = None, log_prefix: str = "[SkipIntro]") -> Callable:
     def decorator(func: Callable) -> Callable:
         @wraps(func)
@@ -65,7 +121,7 @@ def catch_exceptions(default_return: Any = None, log_prefix: str = "[SkipIntro]"
             try:
                 return func(*args, **kwargs)
             except Exception as e:
-                log(f"Error in {func.__name__}: {e}", log_prefix, xbmc.LOGERROR)
+                log(f"[{func.__name__}] Error: {e}", log_prefix, xbmc.LOGERROR)
                 return default_return
         return wrapper
     return decorator
@@ -91,7 +147,7 @@ class SettingsManager:
             self._cache_time[setting_id] = now
             return value
         except Exception as e:
-            log(f"Error getting setting '{setting_id}': {e}")
+            log(f"Failed to get setting '{setting_id}': {e}", xbmc.LOGERROR)
             return default
 
     @property
@@ -108,7 +164,7 @@ class SettingsManager:
         try:
             return self._addon.getLocalizedString(string_id)
         except Exception as e:
-            log(f"Error getting string {string_id}: {e}")
+            log(f"Failed to get string {string_id}: {e}", xbmc.LOGERROR)
             return f"[String {string_id}]"
 
     def invalidate_cache(self) -> None:
@@ -117,7 +173,6 @@ class SettingsManager:
 
     def set_setting(self, setting_id: str, value: Union[bool, int, float, str]) -> bool:
         try:
-            str_value: str
             if isinstance(value, bool):
                 str_value = 'true' if value else 'false'
             elif isinstance(value, (int, float)):
@@ -128,7 +183,7 @@ class SettingsManager:
             self.invalidate_cache()
             return True
         except Exception as e:
-            log(f"Error setting '{setting_id}': {e}")
+            log(f"Failed to set '{setting_id}': {e}", xbmc.LOGERROR)
             return False
 
 
@@ -142,7 +197,7 @@ def _get_cached_data(cache_name: str, force_reload: bool = False) -> Tuple[Any, 
             return None, False
 
         now: float = time.time()
-        if not force_reload and cache['data'] is not None and (now - cache['time']) < cache.get('ttl', 3600.0):
+        if not force_reload and cache.get('data') is not None and (now - cache.get('time', 0)) < cache.get('ttl', 3600.0):
             return cache['data'], True
 
         return None, False
@@ -154,6 +209,12 @@ def _set_cached_data(cache_name: str, data: Any) -> None:
         if cache:
             cache['data'] = data
             cache['time'] = time.time()
+
+
+def _evict_season_cache() -> None:
+    season_cache: OrderedDict = _caches.get('season_episodes', OrderedDict())
+    while len(season_cache) > MAX_SEASON_CACHE_ENTRIES:
+        season_cache.popitem(last=False)
 
 
 def load_skip_data(force_reload: bool = False) -> Dict[str, Any]:
@@ -170,12 +231,12 @@ def load_skip_data(force_reload: bool = False) -> Dict[str, Any]:
             data: Dict[str, Any] = json.load(f)
             _set_cached_data('skip_data', data)
             return data
-    except Exception as e:
-        log(f"Error loading skip data: {e}")
+    except (json.JSONDecodeError, IOError) as e:
+        log(f"Failed to load skip data: {e}", xbmc.LOGERROR)
         return {}
 
 
-def save_skip_data(data: Dict[str, Any]) -> None:
+def _do_save_skip_data(data: Dict[str, Any]) -> None:
     temp_file: str = SKIP_DATA_FILE + ".tmp"
     backup_file: str = SKIP_DATA_FILE + ".bak"
 
@@ -196,22 +257,56 @@ def save_skip_data(data: Dict[str, Any]) -> None:
 
         _set_cached_data('skip_data', data)
     except Exception as e:
-        log(f"Error saving skip data: {e}")
+        log(f"Failed to save skip data: {e}", xbmc.LOGERROR)
         if os.path.exists(temp_file):
             try:
                 os.remove(temp_file)
-            except:
-                pass
+            except OSError as cleanup_err:
+                log(f"Failed to remove temp file: {cleanup_err}", xbmc.LOGWARNING)
         if os.path.exists(backup_file):
             try:
                 if os.path.exists(SKIP_DATA_FILE):
                     os.remove(SKIP_DATA_FILE)
-                os.rename(backup_file, SKIP_DATA_FILE)
-            except Exception as backup_e:
-                log(f"Failed to restore backup: {backup_e}")
+                if os.path.exists(backup_file):
+                    os.rename(backup_file, SKIP_DATA_FILE)
+                    log("Restored backup file successfully", xbmc.LOGDEBUG)
+            except OSError as restore_err:
+                log(f"Failed to restore backup: {restore_err}", xbmc.LOGERROR)
+
+
+def save_skip_data(data: Dict[str, Any]) -> None:
+    with _save_pending_lock:
+        global _save_pending_data, _save_timer
+        _save_pending_data = data
+
+        if _save_timer is not None:
+            _save_timer.cancel()
+
+        _save_timer = threading.Timer(SAVE_DEBOUNCE_MS / 1000.0, _flush_save_data)
+        _save_timer.daemon = True
+        _save_timer.start()
+
+
+def _flush_save_data() -> None:
+    global _save_pending_data, _save_timer
+    with _save_pending_lock:
+        data = _save_pending_data
+        _save_timer = None
+        _save_pending_data = None
+
+    if data is not None:
+        with _save_lock:
+            _do_save_skip_data(data)
 
 
 def delete_all_skip_points() -> None:
+    with _save_pending_lock:
+        global _save_pending_data, _save_timer
+        _save_pending_data = None
+        if _save_timer is not None:
+            _save_timer.cancel()
+            _save_timer = None
+
     if os.path.exists(SKIP_DATA_FILE):
         os.remove(SKIP_DATA_FILE)
     _set_cached_data('skip_data', {})
@@ -228,18 +323,19 @@ def jsonrpc_call(method: str, params: Optional[Dict[str, Any]] = None, request_i
 
     try:
         response = json.loads(xbmc.executeJSONRPC(json.dumps(query)))
-    except Exception as e:
-        log(f"JSON-RPC call failed for {method}: {e}", xbmc.LOGERROR)
+    except (ValueError, RuntimeError) as e:
+        log(f"JSON-RPC call failed [{method}]: {e}", xbmc.LOGERROR)
         return None
 
     if isinstance(response, dict) and "error" in response:
-        log(f"JSON-RPC error for {method}: {response.get('error')}", xbmc.LOGWARNING)
+        error = response.get('error', {})
+        log(f"JSON-RPC error [{method}]: {error}", xbmc.LOGWARNING)
         return None
 
     return response.get("result") if isinstance(response, dict) else None
 
 
-def get_current_episode_id(tvshowid, season, episode, current_file=None):
+def get_current_episode_id(tvshowid: Any, season: Any, episode: Any, current_file: Optional[str] = None) -> Optional[int]:
     try:
         tvshowid = int(tvshowid) if tvshowid not in (None, -1, "") else None
         season = int(season) if season not in (None, -1, "") else None
@@ -268,17 +364,17 @@ def get_current_episode_id(tvshowid, season, episode, current_file=None):
             if ep.get("season") == season and ep.get("episode") == episode:
                 episodeid = ep.get("episodeid")
                 if episodeid and episodeid != -1:
-                    log(f"get_current_episode_id: found episodeid={episodeid} for S{season}E{episode}")
+                    log_debug(f"Found episodeid={episodeid} for S{season}E{episode}")
                     return episodeid
 
-        log(f"get_current_episode_id: no episodeid found for S{season}E{episode}")
+        log_debug(f"No episodeid found for S{season}E{episode}")
         return None
-    except Exception as e:
-        log(f"get_current_episode_id error: {e}")
+    except (ValueError, TypeError) as e:
+        log(f"get_current_episode_id error: {e}", xbmc.LOGERROR)
         return None
 
 
-def get_tvshowid_from_title(show_title):
+def get_tvshowid_from_title(show_title: str) -> Optional[int]:
     try:
         result = jsonrpc_call(
             "VideoLibrary.GetTVShows", {"properties": ["title"]}
@@ -287,17 +383,20 @@ def get_tvshowid_from_title(show_title):
         for show in result.get("tvshows", []):
             if show.get("label") == show_title:
                 tvshowid = show.get("tvshowid")
-                log(f"get_tvshowid_from_title: found tvshowid={tvshowid} for '{show_title}'")
+                log_debug(f"Found tvshowid={tvshowid} for '{show_title}'")
                 return tvshowid
 
-        log(f"get_tvshowid_from_title: no tvshowid found for '{show_title}'")
+        log_debug(f"No tvshowid found for '{show_title}'")
         return None
     except Exception as e:
-        log(f"get_tvshowid_from_title error: {e}")
+        log(f"get_tvshowid_from_title error: {e}", xbmc.LOGERROR)
         return None
 
 
-def get_next_episode_from_library(tvshowid, current_file, include_watched=True, current_episode_num=None, current_season_num=None):
+def get_next_episode_from_library(tvshowid: Any, current_file: Optional[str] = None,
+                                    include_watched: bool = True,
+                                    current_episode_num: Optional[int] = None,
+                                    current_season_num: Optional[int] = None) -> Optional[Dict[str, Any]]:
     try:
         if tvshowid in (None, -1, ""):
             return None
@@ -311,8 +410,8 @@ def get_next_episode_from_library(tvshowid, current_file, include_watched=True, 
             {
                 "tvshowid": tvshowid,
                 "properties": ["title", "plot", "season", "episode", "playcount",
-                              "showtitle", "file", "art", "runtime", "firstaired",
-                              "dateadded", "lastplayed"],
+                               "showtitle", "file", "art", "runtime", "firstaired",
+                               "dateadded", "lastplayed"],
                 "sort": {"method": "episode"},
             }
         )
@@ -320,14 +419,14 @@ def get_next_episode_from_library(tvshowid, current_file, include_watched=True, 
         if not result or not result.get("episodes"):
             return None
 
-        episodes = result.get("episodes", [])
+        episodes: List[Dict[str, Any]] = result.get("episodes", [])
         current_index = -1
 
         if current_episode_num is not None and current_season_num is not None:
-            current_season_num_int = int(current_season_num)
-            current_episode_num_int = int(current_episode_num)
+            current_season_int = int(current_season_num)
+            current_episode_int = int(current_episode_num)
             for idx, episode in enumerate(episodes):
-                if episode.get("season") == current_season_num_int and episode.get("episode") == current_episode_num_int:
+                if episode.get("season") == current_season_int and episode.get("episode") == current_episode_int:
                     current_index = idx
                     break
 
@@ -338,11 +437,11 @@ def get_next_episode_from_library(tvshowid, current_file, include_watched=True, 
                     break
 
         if current_index == -1 and current_file:
-            current_file_normalized = normalize_media_path(current_file)
+            current_file_norm = normalize_media_path(current_file)
             for idx, episode in enumerate(episodes):
-                episode_file_normalized = normalize_media_path(episode.get("file", ""))
-                if episode_file_normalized and current_file_normalized:
-                    if episode_file_normalized in current_file_normalized or current_file_normalized in episode_file_normalized:
+                ep_file_norm = normalize_media_path(episode.get("file", ""))
+                if ep_file_norm and current_file_norm:
+                    if ep_file_norm in current_file_norm or current_file_norm in ep_file_norm:
                         current_index = idx
                         break
 
@@ -350,36 +449,36 @@ def get_next_episode_from_library(tvshowid, current_file, include_watched=True, 
             return None
 
         next_index = current_index + 1
-        if next_index < len(episodes):
-            next_episode = episodes[next_index]
+        if next_index >= len(episodes):
+            return None
 
-            if not include_watched:
-                playcount = next_episode.get("playcount", 0)
-                if playcount and playcount > 0:
-                    return None
+        next_episode = episodes[next_index]
 
-            return {
-                "episodeid": next_episode.get("episodeid"),
-                "tvshowid": next_episode.get("tvshowid"),
-                "season": next_episode.get("season"),
-                "episode": next_episode.get("episode"),
-                "title": next_episode.get("title"),
-                "showtitle": next_episode.get("showtitle"),
-                "file": next_episode.get("file"),
-                "plot": next_episode.get("plot"),
-                "playcount": next_episode.get("playcount", 0),
-                "art": next_episode.get("art"),
-                "runtime": next_episode.get("runtime"),
-                "firstaired": next_episode.get("firstaired"),
-            }
+        if not include_watched:
+            playcount = next_episode.get("playcount", 0)
+            if playcount and playcount > 0:
+                return None
 
-        return None
+        return {
+            "episodeid": next_episode.get("episodeid"),
+            "tvshowid": next_episode.get("tvshowid"),
+            "season": next_episode.get("season"),
+            "episode": next_episode.get("episode"),
+            "title": next_episode.get("title"),
+            "showtitle": next_episode.get("showtitle"),
+            "file": next_episode.get("file"),
+            "plot": next_episode.get("plot"),
+            "playcount": next_episode.get("playcount", 0),
+            "art": next_episode.get("art"),
+            "runtime": next_episode.get("runtime"),
+            "firstaired": next_episode.get("firstaired"),
+        }
     except Exception as e:
-        log(f"get_next_episode_from_library: ERROR - {e}")
+        log(f"get_next_episode_from_library error: {e}", xbmc.LOGERROR)
         return None
 
 
-def get_season_episodes(tvshowid, season):
+def get_season_episodes(tvshowid: Any, season: Any) -> Optional[Dict[str, Any]]:
     try:
         if tvshowid in (None, -1, "") or season in (None, -1, ""):
             return None
@@ -392,9 +491,12 @@ def get_season_episodes(tvshowid, season):
 
         cache_key = f"{tvshowid_int}_{season_int}"
         with _cache_lock:
-            cached = _caches['season_episodes'].get(cache_key)
-            if cached and time.time() - cached['time'] < playlist_cache_expiry:
-                return cached['data']
+            season_cache = _caches['season_episodes']
+            if cache_key in season_cache:
+                cached = season_cache[cache_key]
+                if time.time() - cached['time'] < CACHE_TTL_SEASON_EPISODES:
+                    season_cache.move_to_end(cache_key)
+                    return cached['data']
 
         result = jsonrpc_call(
             "VideoLibrary.GetEpisodes",
@@ -422,15 +524,17 @@ def get_season_episodes(tvshowid, season):
         }
 
         with _cache_lock:
-            _caches['season_episodes'][cache_key] = {'data': season_info, 'time': time.time()}
+            season_cache = _caches['season_episodes']
+            season_cache[cache_key] = {'data': season_info, 'time': time.time()}
+            _evict_season_cache()
 
         return season_info
     except Exception as e:
-        log(f"get_season_episodes: ERROR - {e}")
+        log(f"get_season_episodes error: {e}", xbmc.LOGERROR)
         return None
 
 
-def play_episode_from_library(episode_info):
+def play_episode_from_library(episode_info: Dict[str, Any]) -> bool:
     episodeid = episode_info.get("episodeid")
     if not episodeid or episodeid == -1:
         return False
@@ -438,7 +542,8 @@ def play_episode_from_library(episode_info):
     return result == "OK"
 
 
-def is_next_episode_available_in_playlist(playlist_id=None, playlist_position=None):
+def is_next_episode_available_in_playlist(playlist_id: Optional[int] = None,
+                                            playlist_position: Optional[int] = None) -> bool:
     if playlist_id is None or playlist_position is None:
         state = get_active_video_playlist_state()
         if not state:
@@ -454,7 +559,7 @@ def is_next_episode_available_in_playlist(playlist_id=None, playlist_position=No
     return len(result.get("items") or []) > 0
 
 
-def play_file(file_path):
+def play_file(file_path: str) -> bool:
     file_path = str(file_path or "")
     if not file_path:
         return False
@@ -462,7 +567,7 @@ def play_file(file_path):
     return result == "OK"
 
 
-def mark_current_episode_as_watched():
+def mark_current_episode_as_watched() -> bool:
     state = get_active_video_playlist_state()
     if not state:
         return False
@@ -478,40 +583,46 @@ def mark_current_episode_as_watched():
     return result == "OK"
 
 
-def normalize_media_path(path):
+def normalize_media_path(path: str) -> str:
     if not path:
         return ""
     normalized = str(path).split('?', 1)[0].split('#', 1)[0]
     return normalized.replace('\\', '/').rstrip('/')
 
 
-def extract_media_info_from_filename(filename):
+# Patterns for extracting season/episode info from filenames
+# Ordered by priority: most specific patterns first
+_FILENAME_PATTERNS: List[re.Pattern] = [
+    # S01E01 or S01.E01 or S01_E01 or S01-E01 (most common)
+    re.compile(r'[sS](?P<season>\d{1,4})[.\-_]?[eE](?P<episode>\d{1,4})'),
+    # 01x01 or 01X01
+    re.compile(r'(?P<season>\d{1,4})[xX](?P<episode>\d{1,4})'),
+    # S01 EP01
+    re.compile(r'S(?P<season>\d{1,4})[ ._-]?EP(?P<episode>\d{1,4})'),
+    # Season 1 Episode 1
+    re.compile(r'Season[\s._-]?(?P<season>\d{1,4})[\s._-]*Episode[\s._-]?(?P<episode>\d{1,4})'),
+    # S1 E1
+    re.compile(r'S(?P<season>\d{1,4})[\s._-]*E(?P<episode>\d{1,4})'),
+    # 第1季第1集 (Chinese)
+    re.compile(r'第(?P<season>\d{1,4})季第(?P<episode>\d{1,4})集'),
+    # 01-01 or 01.01 or 01_01 (number-number)
+    re.compile(r'(?P<season>\d{1,4})[.\-_](?P<episode>\d{1,4})'),
+    # 第1集 (Chinese, episode only)
+    re.compile(r'第(?P<episode>\d{1,4})集'),
+    # E01 or EP01 (episode only, least specific)
+    re.compile(r'[eE][pP]?(?P<episode>\d{1,4})'),
+]
+
+
+def extract_media_info_from_filename(filename: str) -> Tuple[int, int, bool]:
     if not filename:
         return 0, 0, False
 
     basename = os.path.basename(normalize_media_path(filename))
     basename = os.path.splitext(basename)[0]
 
-    patterns = [
-        r'[sS](?P<season>\d{1,4})[.\-_]?[eE](?P<episode>\d{1,4})',
-        r'(?P<season>\d{1,4})[xX](?P<episode>\d{1,4})',
-        r'[eE][pP]?(?P<episode>\d{1,4})',
-        r'第(?P<episode>\d{1,4})集',
-        r'(?P<season>\d{1,4})[.\-](?P<episode>\d{1,4})',
-        r'Season[\s._-]?(?P<season>\d{1,4})[\s._-]*Episode[\s._-]?(?P<episode>\d{1,4})',
-        r'Season[\s._-]?(?P<season>\d{1,4})[\s._-]*E[\s._-]?(?P<episode>\d{1,4})',
-        r'S(?P<season>\d{1,4})[\s._-]*E(?P<episode>\d{1,4})',
-        r'(?P<season>\d{1,2})[xX](?P<episode>\d{2,3})',
-        r'Episode[\s._-]?(?P<episode>\d{1,4})',
-        r'Ep[\s._-]?(?P<episode>\d{1,4})',
-        r'第(?P<season>\d{1,4})季第(?P<episode>\d{1,4})集',
-        r'S(?P<season>\d{1,4})[ ._-]?EP(?P<episode>\d{1,4})',
-        r'(\d{4})[._-](?P<episode>\d{1,4})',
-        r'[sS](?P<season>\d{1,4})[ ._-]?(?P<episode>\d{1,4})',
-    ]
-
-    for pattern in patterns:
-        match = re.search(pattern, basename)
+    for pattern in _FILENAME_PATTERNS:
+        match = pattern.search(basename)
         if match:
             groups = match.groupdict()
             season = int(groups.get("season", 1) or 1)
@@ -522,12 +633,12 @@ def extract_media_info_from_filename(filename):
     return 0, 0, False
 
 
-def natural_sort_key(value):
+def natural_sort_key(value: str) -> List[Any]:
     text = str(value or "")
     return [int(part) if part.isdigit() else part.casefold() for part in re.split(r'(\d+)', text)]
 
 
-def get_parent_media_path(path):
+def get_parent_media_path(path: str) -> Optional[str]:
     normalized = normalize_media_path(path)
     if not normalized:
         return None
@@ -537,41 +648,48 @@ def get_parent_media_path(path):
     return normalized[:last_sep]
 
 
-def get_active_video_playlist_state():
+def get_active_video_playlist_state() -> Optional[Dict[str, Any]]:
     cached, hit = _get_cached_data('playlist_state')
     if hit:
         return cached
 
-    players = jsonrpc_call("Player.GetActivePlayers") or []
-    video_player = next((p for p in players if p.get("type") == "video"), None)
-    if not video_player:
+    player_id = _get_video_player_id()
+    if player_id is None:
         return None
 
-    player_id = video_player.get("playerid")
-    properties = jsonrpc_call(
-        "Player.GetProperties",
-        {"playerid": player_id, "properties": ["playlistid", "position"]},
-    ) or {}
-
-    item = jsonrpc_call(
+    # Get item info (only valid item properties)
+    item_response = jsonrpc_call(
         "Player.GetItem",
-        {"playerid": player_id, "properties": ["file", "tvshowid", "season", "episode", "showtitle", "title"]},
+        {
+            "playerid": player_id,
+            "properties": ["file", "tvshowid", "season", "episode", "showtitle", "title"]
+        },
     ) or {}
 
-    current_item = item.get("item") or {}
-    playlist_id = int(properties.get("playlistid") or 1)
-    current_position = int(properties.get("position") or 0)
+    item_data = item_response.get("item") or {}
+
+    # Get player properties (playlistid, position are player properties)
+    props_response = jsonrpc_call(
+        "Player.GetProperties",
+        {
+            "properties": ["playlistid", "position"],
+            "playerid": player_id
+        },
+    ) or {}
+
+    playlist_id = int(props_response.get("playlistid") or 1)
+    current_position = int(props_response.get("position") or 0)
 
     if playlist_id < 0 or current_position < 0:
         return None
 
-    episode_no = current_item.get("episode")
+    episode_no = item_data.get("episode")
     try:
         episode_no = int(episode_no) if episode_no is not None else None
     except (TypeError, ValueError):
         episode_no = None
 
-    season_no = current_item.get("season")
+    season_no = item_data.get("season")
     try:
         season_no = int(season_no) if season_no is not None else None
     except (TypeError, ValueError):
@@ -581,19 +699,19 @@ def get_active_video_playlist_state():
         "playerid": player_id,
         "playlistid": playlist_id,
         "position": current_position,
-        "file": current_item.get("file") or "",
-        "tvshowid": current_item.get("tvshowid"),
+        "file": item_data.get("file") or "",
+        "tvshowid": item_data.get("tvshowid"),
         "season": season_no,
         "episode": episode_no,
-        "showtitle": current_item.get("showtitle") or "",
-        "title": current_item.get("title") or "",
+        "showtitle": item_data.get("showtitle") or "",
+        "title": item_data.get("title") or "",
     }
 
     _set_cached_data('playlist_state', result)
     return result
 
 
-def get_playlist_items(playlist_id):
+def get_playlist_items(playlist_id: int) -> List[Dict[str, Any]]:
     result = jsonrpc_call(
         "Playlist.GetItems",
         {"playlistid": playlist_id, "properties": ["tvshowid", "season", "episode", "file"]},
@@ -604,7 +722,7 @@ def get_playlist_items(playlist_id):
     return items
 
 
-def get_season_episode_from_state(source_type, state, season):
+def get_season_episode_from_state(source_type: str, state: Any, season: Any) -> Tuple[int, int]:
     try:
         if source_type == 'directory' and isinstance(state, dict):
             current_file = state.get("file", "")
@@ -622,11 +740,11 @@ def get_season_episode_from_state(source_type, state, season):
             episode_num = 1
 
         return season_num, episode_num
-    except Exception:
+    except (ValueError, TypeError):
         return 1, 1
 
 
-def get_directory_playlist_files(current_file):
+def get_directory_playlist_files(current_file: str) -> List[str]:
     try:
         if not current_file:
             return []
@@ -666,11 +784,11 @@ def get_directory_playlist_files(current_file):
         playlist_items.sort(key=lambda value: (natural_sort_key(value[0]), normalize_media_path(value[1]).casefold()))
         return [file_path for _, file_path in playlist_items]
     except Exception as e:
-        log(f"get_directory_playlist_files: ERROR - {e}")
+        log(f"get_directory_playlist_files error: {e}", xbmc.LOGERROR)
         return []
 
 
-def get_next_file_in_directory(current_file):
+def get_next_file_in_directory(current_file: str) -> Optional[str]:
     try:
         if not current_file:
             return None
@@ -684,89 +802,130 @@ def get_next_file_in_directory(current_file):
             return None
 
         norms = [normalize_media_path(path) for path in files]
-        idx = norms.index(current_norm)
+        try:
+            idx = norms.index(current_norm)
+        except ValueError:
+            return None
 
         next_idx = idx + 1
         if next_idx >= len(files):
             return None
 
         return files[next_idx]
-    except (ValueError, Exception):
+    except Exception as e:
+        log(f"get_next_file_in_directory error: {e}", xbmc.LOGERROR)
         return None
 
 
-def get_current_tvshow_info():
+def _get_video_player_id() -> Optional[int]:
+    players = jsonrpc_call("Player.GetActivePlayers") or []
+    video_player = next((p for p in players if p.get("type") == "video"), None)
+    if not video_player:
+        return None
+    return video_player.get("playerid")
+
+
+def get_current_tvshow_info() -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
     try:
-        json_query = {
-            "jsonrpc": "2.0",
-            "method": "Player.GetItem",
-            "params": {"properties": ["tvshowid", "showtitle", "season", "file"], "playerid": 1},
-            "id": 1
-        }
-        response = json.loads(xbmc.executeJSONRPC(json.dumps(json_query)))
+        player_id = _get_video_player_id()
+        if player_id is None:
+            return None, None, None, None
 
-        if 'result' in response and 'item' in response['result']:
-            item = response['result']['item']
-            item_type = item.get('type', '')
-            tvshow_id = item.get('tvshowid')
-            show_title = item.get('showtitle')
-            season = item.get('season', -1)
-            file_path = item.get('file')
+        # Get item info (only valid item properties)
+        result = jsonrpc_call(
+            "Player.GetItem",
+            {"properties": ["tvshowid", "showtitle", "season", "file"], "playerid": player_id}
+        ) or {}
 
-            if item_type == 'movie' or item_type == 'musicvideo':
+        item = result.get("item") or {}
+        tvshow_id = item.get('tvshowid')
+        show_title = item.get('showtitle')
+        season = item.get('season', -1)
+        file_path = item.get('file')
+
+        # Check type via Player.GetProperties
+        props = jsonrpc_call(
+            "Player.GetProperties",
+            {"properties": ["type"], "playerid": player_id}
+        ) or {}
+        item_type = props.get('type', '')
+
+        if item_type == 'movie' or item_type == 'musicvideo':
+            return None, None, None, None
+
+        if tvshow_id and tvshow_id != -1 and show_title:
+            return str(tvshow_id), show_title, str(season), 'library'
+
+        if file_path:
+            if file_path.startswith("plugin://") or file_path.startswith("pvr://"):
                 return None, None, None, None
 
-            if tvshow_id and tvshow_id != -1 and show_title:
-                return str(tvshow_id), show_title, str(season), 'library'
+            basename = os.path.basename(file_path)
+            has_episode_pattern = bool(re.search(
+                r'[sS]\d{1,4}[._-]?[eE]\d{1,4}|\d{1,4}[xX]\d{1,4}|第\d{1,4}集', basename
+            ))
 
-            if file_path:
-                if file_path.startswith("plugin://") or file_path.startswith("pvr://"):
-                    return None, None, None, None
+            if not has_episode_pattern:
+                return None, None, None, None
 
-                basename = os.path.basename(file_path)
-                has_episode_pattern = bool(re.search(r'[sS]\d{1,4}[._-]?[eE]\d{1,4}|\d{1,4}[xX]\d{1,4}|第\d{1,4}集', basename))
+            parent_dir = os.path.dirname(file_path)
+            dir_name = os.path.basename(parent_dir)
 
-                if not has_episode_pattern:
-                    return None, None, None, None
+            season_num, episode_num, parsed = extract_media_info_from_filename(file_path)
+            if not parsed or season_num <= 0:
+                season_num = 1
 
-                parent_dir = os.path.dirname(file_path)
-                dir_name = os.path.basename(parent_dir)
-
-                season_num, episode_num, parsed = extract_media_info_from_filename(file_path)
-                if not parsed or season_num <= 0:
-                    season_num = 1
-
-                return f"directory:{parent_dir}", dir_name, str(season_num), 'directory'
+            return f"directory:{parent_dir}", dir_name, str(season_num), 'directory'
     except Exception as e:
-        log(f"Error getting TV show info: {e}")
+        log(f"get_current_tvshow_info error: {e}", xbmc.LOGERROR)
     return None, None, None, None
 
 
 class State:
-    _shared_state: Dict[str, bool] = {}
-    _state_lock: threading.Lock = threading.Lock()
+    """Thread-safe shared state using Borg pattern."""
+    _shared_data: Dict[str, Any] = {
+        'playing_next': False,
+        'track': True,
+        'pause': False,
+    }
 
     def __init__(self) -> None:
-        self.__dict__ = self._shared_state
-        if 'playing_next' not in self._shared_state:
-            self.playing_next = False
-            self.track = True
-            self.pause = False
+        pass  # Use class-level shared data directly
 
     @property
     def playing_next(self) -> bool:
-        with self._state_lock:
-            return self._shared_state.get('playing_next', False)
+        with _state_lock:
+            return self._shared_data['playing_next']
 
     @playing_next.setter
     def playing_next(self, value: bool) -> None:
-        with self._state_lock:
-            self._shared_state['playing_next'] = value
-            log(f"State: playing_next set to {value}")
+        with _state_lock:
+            self._shared_data['playing_next'] = value
+            log_debug(f"playing_next set to {value}")
+
+    @property
+    def track(self) -> bool:
+        with _state_lock:
+            return self._shared_data['track']
+
+    @track.setter
+    def track(self, value: bool) -> None:
+        with _state_lock:
+            self._shared_data['track'] = value
+
+    @property
+    def pause(self) -> bool:
+        with _state_lock:
+            return self._shared_data['pause']
+
+    @pause.setter
+    def pause(self, value: bool) -> None:
+        with _state_lock:
+            self._shared_data['pause'] = value
 
     def reset(self) -> None:
-        with self._state_lock:
-            self._shared_state.update({
+        with _state_lock:
+            self._shared_data.update({
                 'playing_next': False,
                 'track': True,
                 'pause': False
@@ -774,7 +933,7 @@ class State:
 
 
 class EpisodePlaylistFixer:
-    def __init__(self, playlist_id, current_episode, season_info):
+    def __init__(self, playlist_id: int, current_episode: int, season_info: Dict[str, Any]):
         self.playlist_id = playlist_id
         if not isinstance(season_info, dict):
             raise ValueError(f"season_info must be a dict, got: {type(season_info).__name__}")
@@ -784,21 +943,21 @@ class EpisodePlaylistFixer:
         episodes = season_info.get("episodes")
 
         if tvshowid in (None, -1) or season_id in (None, -1):
-            raise ValueError(f"season_info must have valid tvshowid and season")
+            raise ValueError("season_info must have valid tvshowid and season")
 
         if not episodes or not isinstance(episodes, list):
-            raise ValueError(f"season_info must have a non-empty episodes list")
+            raise ValueError("season_info must have a non-empty episodes list")
 
         try:
             self.current_episode = int(current_episode)
         except (TypeError, ValueError):
-            raise ValueError(f"current_episode must be numeric")
+            raise ValueError("current_episode must be numeric")
 
         self.season_info = season_info
         self.playlist_items = get_playlist_items(playlist_id)
         self.current_play = self._find_current_play()
 
-    def _find_current_play(self):
+    def _find_current_play(self) -> Optional[Dict[str, Any]]:
         tvshowid = self.season_info.get("tvshowid")
         season_id = self.season_info.get("season")
         for item in self.playlist_items:
@@ -807,11 +966,11 @@ class EpisodePlaylistFixer:
                 return item
         return None
 
-    def _reindex_items(self):
+    def _reindex_items(self) -> None:
         for idx, item in enumerate(self.playlist_items):
             item["position"] = idx
 
-    def _insert(self, position, episode_item):
+    def _insert(self, position: int, episode_item: Dict[str, Any]) -> bool:
         episode_id = episode_item.get("id")
         episode_no = episode_item.get("episode")
         position = max(0, min(int(position), len(self.playlist_items)))
@@ -835,7 +994,7 @@ class EpisodePlaylistFixer:
         xbmc.sleep(PLAYLIST_MUTATION_DELAY_MS)
         return True
 
-    def _remove(self, position):
+    def _remove(self, position: int) -> bool:
         try:
             position = int(position)
         except (TypeError, ValueError):
@@ -855,7 +1014,7 @@ class EpisodePlaylistFixer:
         xbmc.sleep(PLAYLIST_MUTATION_DELAY_MS)
         return True
 
-    def _remove_incorrect_order_episodes(self):
+    def _remove_incorrect_order_episodes(self) -> int:
         if not self.current_play:
             return 0
 
@@ -880,7 +1039,7 @@ class EpisodePlaylistFixer:
                 removed += 1
         return removed
 
-    def _get_insert_position(self, target_episode):
+    def _get_insert_position(self, target_episode: int) -> Optional[int]:
         if not isinstance(target_episode, int):
             return None
 
@@ -900,7 +1059,7 @@ class EpisodePlaylistFixer:
 
         return last_same_season_position + 1 if isinstance(last_same_season_position, int) else len(self.playlist_items)
 
-    def _fill_neighbors_around_current(self):
+    def _fill_neighbors_around_current(self) -> Tuple[int, int]:
         if not self.current_play:
             return 0, 0
 
@@ -909,8 +1068,10 @@ class EpisodePlaylistFixer:
             return 0, 0
 
         current_play_id = self.current_play.get("id")
-        current_episode_idx = next((idx for idx, item in enumerate(season_episodes)
-                                    if isinstance(item, dict) and item.get("id") == current_play_id), -1)
+        current_episode_idx = next((
+            idx for idx, item in enumerate(season_episodes)
+            if isinstance(item, dict) and item.get("id") == current_play_id
+        ), -1)
         if current_episode_idx < 0:
             return 0, 0
 
@@ -941,7 +1102,7 @@ class EpisodePlaylistFixer:
 
         return insert_before, insert_after
 
-    def fix(self):
+    def fix(self) -> Dict[str, Any]:
         if not isinstance(self.current_play, dict):
             return {"removed": 0, "inserted_before": 0, "inserted_after": 0, "playlistid": self.playlist_id}
 
@@ -950,7 +1111,7 @@ class EpisodePlaylistFixer:
             inserted_before, inserted_after = self._fill_neighbors_around_current()
 
             if removed_below or inserted_before or inserted_after:
-                log(f"Synced season playlist: removed_below={removed_below}, before={inserted_before}, after={inserted_after}")
+                log_debug(f"Synced season playlist: removed={removed_below}, before={inserted_before}, after={inserted_after}")
 
             return {
                 "removed": removed_below,
@@ -959,24 +1120,41 @@ class EpisodePlaylistFixer:
                 "playlistid": self.playlist_id,
             }
         except Exception as e:
-            log(f"Error fixing playlist: {e}")
+            log(f"Error fixing playlist: {e}", xbmc.LOGERROR)
             return {"removed": 0, "inserted_before": 0, "inserted_after": 0, "playlistid": self.playlist_id}
 
 
-def autofill_playlist_for_current_video():
-    def _autofill_thread():
+def autofill_playlist_for_current_video() -> None:
+    global _autofill_thread
+
+    if _autofill_thread and _autofill_thread.is_alive():
+        # Signal existing thread to restart countdown
+        _autofill_event.set()
+        return
+
+    _autofill_event.clear()
+
+    def _autofill_thread_func() -> None:
         try:
-            time.sleep(2)
-            _do_autofill()
+            # Wait for delay or early signal
+            if not _autofill_event.wait(AUTOFILL_DELAY_SECONDS):
+                _do_autofill()
+            else:
+                # Re-signaled, wait again
+                if not _autofill_event.wait(AUTOFILL_DELAY_SECONDS):
+                    _do_autofill()
         except Exception as e:
-            log(f"Autofill thread error: {e}")
+            log(f"Autofill thread error: {e}", xbmc.LOGERROR)
+        finally:
+            global _autofill_thread
+            _autofill_thread = None
 
-    thread = threading.Thread(target=_autofill_thread)
-    thread.daemon = True
-    thread.start()
+    _autofill_thread = threading.Thread(target=_autofill_thread_func)
+    _autofill_thread.daemon = True
+    _autofill_thread.start()
 
 
-def _do_autofill():
+def _do_autofill() -> None:
     if not SETTINGS.autofill_playlist_on_play:
         return
 
@@ -997,9 +1175,11 @@ def _do_autofill():
     if is_scraped_tvshow and current_episode is not None and current_episode != -1:
         season_info = get_season_episodes(tvshow_id, season)
         if season_info:
-            fixer = EpisodePlaylistFixer(playlist_id=state.get("playlistid", 1),
-                                         current_episode=current_episode,
-                                         season_info=season_info)
+            fixer = EpisodePlaylistFixer(
+                playlist_id=state.get("playlistid", 1),
+                current_episode=current_episode,
+                season_info=season_info
+            )
             fixer.fix()
         return
 
@@ -1015,11 +1195,15 @@ def _do_autofill():
     if current_file_norm not in target_norms:
         return
 
-    _sync_directory_playlist(state.get("playlistid", 1), state.get("position", 0),
-                             current_file_norm, target_norms, target_files)
+    _sync_directory_playlist(
+        state.get("playlistid", 1), state.get("position", 0),
+        current_file_norm, target_norms, target_files
+    )
 
 
-def _sync_directory_playlist(playlist_id, current_position, current_file_norm, target_norms, target_files):
+def _sync_directory_playlist(playlist_id: int, current_position: int,
+                               current_file_norm: str, target_norms: List[str],
+                               target_files: List[str]) -> None:
     playlist_items = get_playlist_items(playlist_id)
     current_playlist_norms = {
         normalize_media_path(item.get("file", "")) for item in playlist_items if item.get("file")
@@ -1031,12 +1215,17 @@ def _sync_directory_playlist(playlist_id, current_position, current_file_norm, t
     except ValueError:
         return
 
+    # Get files before current (up to MAX_PLAYLIST_ITEMS_BEFORE)
+    before_slice = target_files[:current_target_idx]
     missing_before = [
-        path for path, norm in zip(target_files[:current_target_idx], target_norms[:current_target_idx])
+        path for path, norm in zip(before_slice, target_norms[:current_target_idx])
         if norm not in current_playlist_norms
     ][-MAX_PLAYLIST_ITEMS_BEFORE:]
+
+    # Get files after current (up to MAX_PLAYLIST_ITEMS_AFTER)
+    after_slice = target_files[current_target_idx + 1:]
     missing_after = [
-        path for path, norm in zip(target_files[current_target_idx + 1:], target_norms[current_target_idx + 1:])
+        path for path, norm in zip(after_slice, target_norms[current_target_idx + 1:])
         if norm not in current_playlist_norms
     ][:MAX_PLAYLIST_ITEMS_AFTER]
 
