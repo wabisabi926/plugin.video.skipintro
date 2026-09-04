@@ -76,7 +76,7 @@ def record_skip_point() -> None:
         return
 
     data[tvshow_id]["seasons"][season] = season_data
-    save_skip_data(data)
+    save_skip_data(data, immediate=True)
 
     xbmcgui.Window(10000).setProperty("MFG.Reload", "true")
 
@@ -129,7 +129,7 @@ def delete_skip_point() -> None:
     if not data[tvshow_id]["seasons"]:
         del data[tvshow_id]
 
-    save_skip_data(data)
+    save_skip_data(data, immediate=True)
 
     xbmcgui.Window(10000).setProperty("MFG.Reload", "true")
     show_notification(SETTINGS.get_string(32027), msg)

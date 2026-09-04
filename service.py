@@ -149,7 +149,7 @@ class PlayerMonitor(xbmc.Player):
         if not tvshow_id:
             return
 
-        data = load_skip_data()
+        data = load_skip_data(force_reload=True)
         if tvshow_id not in data:
             return
 

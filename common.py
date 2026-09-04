@@ -274,13 +274,20 @@ def _do_save_skip_data(data: Dict[str, Any]) -> None:
                 log(f"Failed to restore backup: {restore_err}", xbmc.LOGERROR)
 
 
-def save_skip_data(data: Dict[str, Any]) -> None:
+def save_skip_data(data: Dict[str, Any], immediate: bool = False) -> None:
     with _save_pending_lock:
         global _save_pending_data, _save_timer
         _save_pending_data = data
 
         if _save_timer is not None:
             _save_timer.cancel()
+
+        if immediate:
+            _save_timer = None
+            _save_pending_data = None
+            with _save_lock:
+                _do_save_skip_data(data)
+            return
 
         _save_timer = threading.Timer(SAVE_DEBOUNCE_MS / 1000.0, _flush_save_data)
         _save_timer.daemon = True

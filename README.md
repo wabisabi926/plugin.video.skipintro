@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.3.9-blue.svg)](https://github.com/wabisabi926/plugin.video.skipintro)
+[![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](https://github.com/wabisabi926/plugin.video.skipintro)
 [![License](https://img.shields.io/badge/license-NC--3.0-green.svg)](LICENSE.txt)
 [![Platform](https://img.shields.io/badge/platform-Kodi-orange.svg)](https://kodi.tv/)
 
@@ -323,6 +323,11 @@ RunScript(plugin.video.skipintro, ?mode=delete_skip_point)
 ---
 
 ## 更新日志
+
+### v1.4.0 (2026-09)
+- 🐛 **修复片尾首次记录不生效**：修复首次记录片尾跳过点后，不会立即弹出「自动跳转下一集」提示窗口的问题（此前需要记录两次或下一次播放才会生效）
+- 🔧 **保存更可靠**：记录/删除跳过点后立即写入数据文件，不再等待延迟保存
+- 🔧 **后台刷新更及时**：后台服务强制重新读取最新记录，确保首次记录立即生效
 
 ### v1.3.9 (2026-07)
 - 🎉 **新增功能**：支持删除所有跳过记录（插件设置 → 「删除所有记录点」）
