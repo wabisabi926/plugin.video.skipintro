@@ -10,7 +10,7 @@ import xbmcgui
 from common import (
     load_skip_data, save_skip_data, get_current_tvshow_info,
     log, SETTINGS, delete_all_skip_points,
-    show_notification, _parse_season_data,
+    show_notification, wait_for_notifications, _parse_season_data,
     SKIP_THRESHOLD_INTRO, SKIP_THRESHOLD_OUTRO
 )
 
@@ -38,7 +38,7 @@ def get_current_playback_time() -> Tuple[float, float]:
 def record_skip_point() -> None:
     tvshow_id, show_title, season, source_type = get_current_tvshow_info()
     if not tvshow_id:
-        show_notification(SETTINGS.get_string(32027), SETTINGS.get_string(32004))
+        show_notification(SETTINGS.get_string(32004))
         return
 
     current_time, total_time = get_current_playback_time()
@@ -72,7 +72,7 @@ def record_skip_point() -> None:
         m, s = divmod(int(outro_duration), 60)
         msg = SETTINGS.get_string(32006) % (m, s)
     else:
-        show_notification(SETTINGS.get_string(32027), SETTINGS.get_string(32007))
+        show_notification(SETTINGS.get_string(32007))
         return
 
     data[tvshow_id]["seasons"][season] = season_data
@@ -81,14 +81,14 @@ def record_skip_point() -> None:
     xbmcgui.Window(10000).setProperty("MFG.Reload", "true")
 
     full_msg = SETTINGS.get_string(32008) % (msg, season)
-    show_notification(SETTINGS.get_string(32027), full_msg)
+    show_notification(full_msg)
     log(f"Recorded skip point for {show_title} Season {season}: {season_data}")
 
 
 def delete_skip_point() -> None:
     tvshow_id, show_title, season, source_type = get_current_tvshow_info()
     if not tvshow_id:
-        show_notification(SETTINGS.get_string(32027), SETTINGS.get_string(32004))
+        show_notification(SETTINGS.get_string(32004))
         return
 
     current_time, total_time = get_current_playback_time()
@@ -99,7 +99,7 @@ def delete_skip_point() -> None:
     data = load_skip_data()
 
     if tvshow_id not in data or "seasons" not in data[tvshow_id] or season not in data[tvshow_id]["seasons"]:
-        show_notification(SETTINGS.get_string(32027), SETTINGS.get_string(32010))
+        show_notification(SETTINGS.get_string(32010))
         return
 
     raw_season = data[tvshow_id]["seasons"][season]
@@ -118,7 +118,7 @@ def delete_skip_point() -> None:
         else:
             msg = SETTINGS.get_string(32014)
     else:
-        show_notification(SETTINGS.get_string(32027), SETTINGS.get_string(32015))
+        show_notification(SETTINGS.get_string(32015))
         return
 
     if not season_data:
@@ -132,7 +132,7 @@ def delete_skip_point() -> None:
     save_skip_data(data, immediate=True)
 
     xbmcgui.Window(10000).setProperty("MFG.Reload", "true")
-    show_notification(SETTINGS.get_string(32027), msg)
+    show_notification(msg)
 
 
 def router(paramstring: str) -> None:
@@ -150,16 +150,18 @@ def router(paramstring: str) -> None:
         delete_skip_point()
     elif action == "delete_all_skip_points":
         confirmed = xbmcgui.Dialog().yesno(
-            SETTINGS.get_string(32027),
+            "",
             SETTINGS.get_string(32034),
             yeslabel=SETTINGS.get_string(32025),
             nolabel=SETTINGS.get_string(32026),
         )
         if confirmed:
             delete_all_skip_points()
-            show_notification(SETTINGS.get_string(32027), SETTINGS.get_string(32035))
+            show_notification(SETTINGS.get_string(32035))
 
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         router(sys.argv[1])
+    # 等待自定义通知窗口显示完毕，避免脚本进程退出时窗口被销毁
+    wait_for_notifications()

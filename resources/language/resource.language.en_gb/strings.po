@@ -26,12 +26,12 @@ msgstr "About to finish playing S%02dE%02d"
 #: service.py
 msgctxt "#32002"
 msgid "Play next episode cancelled"
-msgstr "Play next episode cancelled"
+msgstr "Outro skip cancelled"
 
 #: service.py
 msgctxt "#32003"
 msgid "Playing next episode... Press \"Back\" within %d seconds to cancel"
-msgstr "Playing next episode... Press \"Back\" within %d seconds to cancel"
+msgstr "S%02dE%02d about to finish, cancel outro skip by pressing \"Back\" within %d seconds"
 
 #: default.py
 msgctxt "#32004"
