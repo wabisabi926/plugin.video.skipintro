@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import xbmc
+import xbmcgui
 import xbmcvfs
 import json
 import os
@@ -95,15 +96,159 @@ def log_debug(msg: str, prefix: str = "[SkipIntro]") -> None:
         log(msg, prefix, xbmc.LOGDEBUG)
 
 
-def show_notification(title: str, message: str, duration: int = DEFAULT_NOTIFICATION_DURATION) -> None:
+# 通知窗口：长/短两套皮肤，按文字显示宽度选择
+NOTIFICATION_WINDOW_XML = "notification_overlay.xml"
+NOTIFICATION_WINDOW_XML_SHORT = "notification_short.xml"
+NOTIFICATION_SHORT_MAX_DISPLAY_WIDTH = 34
+
+_notification_lock = threading.Lock()
+_active_notification_threads: List[threading.Thread] = []
+_current_notification: Optional["NotificationWindow"] = None
+
+
+def _display_width(text: str) -> int:
+    """估算显示宽度：CJK/全角字符按 2，其余按 1。"""
+    return sum(2 if ord(ch) > 0x2E80 else 1 for ch in text)
+
+
+def _select_notification_xml(message: str) -> str:
+    """按文字显示宽度选择长文本或短文本窗口。"""
+    if _display_width(message) <= NOTIFICATION_SHORT_MAX_DISPLAY_WIDTH:
+        return NOTIFICATION_WINDOW_XML_SHORT
+    return NOTIFICATION_WINDOW_XML
+
+
+class NotificationWindow(xbmcgui.WindowXMLDialog):
+    """使用插件自带皮肤绘制的通知窗口，替代 Kodi 原生 Notification。"""
+
+    def __init__(self, *args, **kwargs):
+        xbmcgui.WindowXMLDialog.__init__(self, *args, **kwargs)
+        self.is_ready = False
+        self._closed = False
+
+    def onInit(self):
+        self.is_ready = True
+
+    def set_message(self, message: str) -> bool:
+        """写入文本；控件尚未就绪时返回 False，便于调用方轮询重试。"""
+        try:
+            ctrl = self.getControl(100)
+            if ctrl:
+                ctrl.setLabel(message)
+                return True
+        except Exception as e:
+            log(f"Failed to set notification label: {e}", xbmc.LOGERROR)
+        return False
+
+    def request_close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            self.close()
+        except Exception as e:
+            log(f"Failed to close notification window: {e}", xbmc.LOGERROR)
+
+    def onAction(self, action):
+        action_id = action.getId()
+        if action_id in [10, 92]:
+            self.request_close()
+            return
+        # 通知窗口会抢占焦点，这里把播放类按键转发给播放器，避免打断视频操作
+        if action_id in [1, 15]:
+            xbmc.executebuiltin("PlayerControl(SmallSkipBackward)")
+        elif action_id in [2, 14]:
+            xbmc.executebuiltin("PlayerControl(SmallSkipForward)")
+        elif action_id in [3, 20]:
+            xbmc.executebuiltin("PlayerControl(BigSkipForward)")
+        elif action_id in [4, 21]:
+            xbmc.executebuiltin("PlayerControl(BigSkipBackward)")
+        elif action_id == 7:
+            xbmc.executebuiltin("ActivateWindow(VideoOSD)")
+        elif action_id == 77:
+            xbmc.executebuiltin("PlayerControl(Forward)")
+        elif action_id == 78:
+            xbmc.executebuiltin("PlayerControl(Rewind)")
+        elif action_id == 12:
+            xbmc.executebuiltin("PlayerControl(Play)")
+
+
+def _run_notification_window(window: "NotificationWindow") -> None:
     try:
-        xbmc.executebuiltin(
-            'Notification(%s, %s, %d, %s)' % (
-                title, message, duration, os.path.join(ADDON_PATH, "icon.png")
-            )
+        window.doModal()
+    except Exception as e:
+        log(f"Notification window error: {e}", xbmc.LOGERROR)
+    finally:
+        with _notification_lock:
+            current = threading.current_thread()
+            if current in _active_notification_threads:
+                _active_notification_threads.remove(current)
+
+
+def _present_notification(window: "NotificationWindow", message: str, duration: int) -> None:
+    """控件一旦可用就立即写入文本，停留指定时长后关闭。
+
+    这里不依赖 onInit 回调（该回调在脚本进程的某些时序下不会触发），
+    改为直接轮询控件，避免文本延迟数秒才出现。
+    """
+    try:
+        deadline = time.time() + 2.0
+        while time.time() < deadline and not window.set_message(message):
+            xbmc.sleep(20)
+        # 窗口初始化可能重置文本，稍后再补写一次确保最终显示
+        xbmc.sleep(150)
+        window.set_message(message)
+        time.sleep(duration / 1000.0)
+    except Exception as e:
+        log(f"Notification present error: {e}", xbmc.LOGERROR)
+    finally:
+        window.request_close()
+        with _notification_lock:
+            current = threading.current_thread()
+            if current in _active_notification_threads:
+                _active_notification_threads.remove(current)
+
+
+def show_notification(message: str, duration: int = DEFAULT_NOTIFICATION_DURATION) -> None:
+    """通过插件自带 XML 窗口显示通知（非阻塞，窗口到时间自动关闭）。"""
+    global _current_notification
+    try:
+        window = NotificationWindow(_select_notification_xml(message), ADDON_PATH)
+
+        with _notification_lock:
+            previous = _current_notification
+            _current_notification = window
+
+        # 新通知到来时先关掉上一条，避免多窗口叠加
+        if previous is not None:
+            previous.request_close()
+
+        modal_thread = threading.Thread(target=_run_notification_window, args=(window,), daemon=True)
+        present_thread = threading.Thread(
+            target=_present_notification, args=(window, message, duration), daemon=True
         )
+        with _notification_lock:
+            _active_notification_threads.append(modal_thread)
+            _active_notification_threads.append(present_thread)
+        modal_thread.start()
+        present_thread.start()
     except Exception as e:
         log(f"Failed to show notification: {e}", xbmc.LOGERROR)
+
+
+def wait_for_notifications(timeout_ms: int = 6000) -> None:
+    """等待进行中的通知窗口结束。
+
+    短生命周期的脚本进程（如 default.py 的 RunScript）退出前调用，
+    否则守护线程会随进程一起被销毁，窗口来不及显示。
+    """
+    deadline = time.time() + timeout_ms / 1000.0
+    while time.time() < deadline:
+        with _notification_lock:
+            alive = [t for t in _active_notification_threads if t.is_alive()]
+        if not alive:
+            return
+        alive[0].join(timeout=0.1)
 
 
 def _parse_season_data(raw: Any) -> Dict[str, Any]:

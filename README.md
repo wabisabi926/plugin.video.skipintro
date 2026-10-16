@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](https://github.com/wabisabi926/plugin.video.skipintro)
+[![Version](https://img.shields.io/badge/version-1.4.1-blue.svg)](https://github.com/wabisabi926/plugin.video.skipintro)
 [![License](https://img.shields.io/badge/license-NC--3.0-green.svg)](LICENSE.txt)
 [![Platform](https://img.shields.io/badge/platform-Kodi-orange.svg)](https://kodi.tv/)
 
@@ -20,6 +20,7 @@
 - ✅ **安全写入**：原子写入 + 防抖机制，减少磁盘占用
 - ✅ **播放列表补全**：解决 OSD 播放列表偶发性排序错乱问题（默认关闭）
 - ✅ **删除所有记录**：支持一键清除全部跳过时间点
+- ✅ **磨砂玻璃通知窗口**：所有提示与倒计时使用插件自绘的半透明磨砂窗口，不显示插件名
 
 ---
 
@@ -170,7 +171,7 @@
 **自动播放说明**：
 - 片尾结束后会显示 6 秒倒计时
 - 倒计时结束自动播放下一集
-- 倒计时期间可按“返回键”取消自动播放下一集
+- 倒计时期间可按“返回键”取消跳过片尾
 
 ### 4.3 一季只记一次
 
@@ -323,6 +324,14 @@ RunScript(plugin.video.skipintro, ?mode=delete_skip_point)
 ---
 
 ## 更新日志
+
+### v1.4.1 (2026-10)
+- 🎨 **通知窗口全面改版**：所有提示与倒计时改用插件自绘的磨砂玻璃窗口，不再使用 Kodi 原生弹窗，且不再显示插件名
+- 🎨 **磨砂玻璃样式**：新增纯平磨砂贴图 `glass_flat.png`，面板为单层半透明深灰（约 69% 不透明度），移除原有渐变、光泽与白色光晕
+- 📐 **窗口按文字长度选择**：按文本显示宽度自动选用长窗（820px）/短窗（560px），避免留白过多或文字溢出
+- 📐 **窗口位置上移**：移到画面上黑边内（`top=6`），适配约 2.1:1 画幅的黑边高度
+- 📝 **合并重复提示**：片尾提示与倒计时合并为一条，集号并入倒计时文案
+- 📝 **文案修正**：按返回键取消时提示「已取消跳过片尾」（原「下一集播放已取消」）
 
 ### v1.4.0 (2026-09)
 - 🐛 **修复片尾首次记录不生效**：修复首次记录片尾跳过点后，不会立即弹出「自动跳转下一集」提示窗口的问题（此前需要记录两次或下一次播放才会生效）

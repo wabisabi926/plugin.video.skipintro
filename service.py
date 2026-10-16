@@ -68,6 +68,8 @@ class CountdownState:
         self.thread: Optional[threading.Thread] = None
         self.active: bool = False
         self.remaining: float = 0.0
+        self.season_num: int = 0
+        self.episode_num: int = 0
 
     def cleanup(self) -> None:
         if self.window:
@@ -206,7 +208,7 @@ class PlayerMonitor(xbmc.Player):
 
                     season_num, episode_num = get_season_episode_from_state(source_type, state, season)
                     notification_text = SETTINGS.get_string(32000) % (season_num, episode_num)
-                    show_notification(SETTINGS.get_string(32027), notification_text)
+                    show_notification(notification_text)
             except Exception as e:
                 log(f"Error during skip: {e}", xbmc.LOGERROR)
 
@@ -346,21 +348,16 @@ def handle_outro_enter(countdown_state: CountdownState) -> None:
     tvshow_id, show_title, season, source_type = get_current_tvshow_info()
     state = get_active_video_playlist_state()
 
-    try:
-        raw_string = SETTINGS.get_string(32001)
-        season_num, episode_num = get_season_episode_from_state(source_type, state, season)
-
-        if '%' in raw_string:
-            notification_text = raw_string % (season_num, episode_num)
-        else:
-            notification_text = f"S{season_num:02d}E{episode_num:02d} {raw_string}"
-
-        show_notification(SETTINGS.get_string(32027), notification_text)
-    except Exception as e:
-        log(f"Error showing outro notification: {e}", xbmc.LOGERROR)
+    countdown_state.season_num, countdown_state.episode_num = get_season_episode_from_state(
+        source_type, state, season
+    )
 
     if countdown_state.window and countdown_state.window.is_ready:
-        countdown_state.window.update_text(SETTINGS.get_string(32003) % int(countdown_state.remaining))
+        countdown_state.window.update_text(
+            SETTINGS.get_string(32003)
+            % (countdown_state.season_num, countdown_state.episode_num,
+               int(countdown_state.remaining) + 1)
+        )
 
 
 def reset_outro_state(countdown_state: CountdownState, player: PlayerMonitor) -> None:
@@ -375,8 +372,9 @@ def reset_outro_state(countdown_state: CountdownState, player: PlayerMonitor) ->
 def handle_countdown_cancellation(countdown_state: CountdownState, player: PlayerMonitor) -> bool:
     if countdown_state.window and countdown_state.window.cancelled:
         player.cancel_skip = True
-        show_notification(SETTINGS.get_string(32027), SETTINGS.get_string(32002))
+        # 先关闭倒计时窗口，再弹通知，避免两个窗口同时处于模态
         countdown_state.cleanup()
+        show_notification(SETTINGS.get_string(32002))
         return True
     return False
 
@@ -388,7 +386,10 @@ def update_countdown_ui(countdown_state: CountdownState, player: PlayerMonitor) 
     try:
         display_seconds = int(countdown_state.remaining) + 1
         if countdown_state.window and countdown_state.window.is_ready:
-            countdown_state.window.update_text(SETTINGS.get_string(32003) % display_seconds)
+            countdown_state.window.update_text(
+                SETTINGS.get_string(32003)
+                % (countdown_state.season_num, countdown_state.episode_num, display_seconds)
+            )
 
         if handle_countdown_cancellation(countdown_state, player):
             return
@@ -425,7 +426,6 @@ if __name__ == '__main__':
                     if not countdown_state.active:
                         if not has_next_episode():
                             show_notification(
-                                SETTINGS.get_string(32027),
                                 SETTINGS.get_string(32032),
                                 duration=NOTIFICATION_DURATION_LONG
                             )
