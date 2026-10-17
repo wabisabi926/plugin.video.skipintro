@@ -45,6 +45,8 @@ SKIP_THRESHOLD_OUTRO = 80
 # Countdown configuration
 COUNTDOWN_SECONDS = 6
 OUTRO_RESET_BUFFER = 6
+# 片尾区内记录/修改片尾点后，先等通知播完再启动倒计时（上限秒数）
+OUTRO_NOTIFICATION_WAIT = 3.0
 MAIN_LOOP_INTERVAL = 0.3
 
 # Auto-fill configuration
@@ -104,6 +106,36 @@ NOTIFICATION_SHORT_MAX_DISPLAY_WIDTH = 34
 _notification_lock = threading.Lock()
 _active_notification_threads: List[threading.Thread] = []
 _current_notification: Optional["NotificationWindow"] = None
+_notification_showing: bool = False
+
+# 跨进程通知状态标记：default.py（记录跳过点）与 service.py 是两个独立进程，
+# 模块级变量不共享，必须借助 Window(10000) 属性通信
+NOTIFICATION_PROP = "SkipIntro.NotificationShowing"
+
+
+def _notification_token(window: "NotificationWindow") -> str:
+    """通知窗口唯一标识（含进程号，跨进程唯一）。"""
+    return f"{os.getpid()}-{id(window)}"
+
+
+def _mark_notification_showing(window: "NotificationWindow", duration: int) -> None:
+    try:
+        xbmcgui.Window(10000).setProperty(
+            NOTIFICATION_PROP,
+            f"{_notification_token(window)}|{time.time() + duration / 1000.0 + 1.0:.3f}",
+        )
+    except Exception as e:
+        log(f"Failed to mark notification property: {e}", xbmc.LOGWARNING)
+
+
+def _clear_notification_prop(window: "NotificationWindow") -> None:
+    try:
+        win = xbmcgui.Window(10000)
+        raw = win.getProperty(NOTIFICATION_PROP) or ""
+        if raw.split("|", 1)[0] == _notification_token(window):
+            win.clearProperty(NOTIFICATION_PROP)
+    except Exception as e:
+        log(f"Failed to clear notification property: {e}", xbmc.LOGWARNING)
 
 
 def _display_width(text: str) -> int:
@@ -174,15 +206,20 @@ class NotificationWindow(xbmcgui.WindowXMLDialog):
 
 
 def _run_notification_window(window: "NotificationWindow") -> None:
+    global _notification_showing
     try:
         window.doModal()
     except Exception as e:
         log(f"Notification window error: {e}", xbmc.LOGERROR)
     finally:
+        _clear_notification_prop(window)
         with _notification_lock:
             current = threading.current_thread()
             if current in _active_notification_threads:
                 _active_notification_threads.remove(current)
+            # doModal 返回即窗口已关闭，是最可靠的"不再显示"信号
+            if _current_notification is window:
+                _notification_showing = False
 
 
 def _present_notification(window: "NotificationWindow", message: str, duration: int) -> None:
@@ -191,6 +228,7 @@ def _present_notification(window: "NotificationWindow", message: str, duration: 
     这里不依赖 onInit 回调（该回调在脚本进程的某些时序下不会触发），
     改为直接轮询控件，避免文本延迟数秒才出现。
     """
+    global _notification_showing
     try:
         deadline = time.time() + 2.0
         while time.time() < deadline and not window.set_message(message):
@@ -203,25 +241,31 @@ def _present_notification(window: "NotificationWindow", message: str, duration: 
         log(f"Notification present error: {e}", xbmc.LOGERROR)
     finally:
         window.request_close()
+        _clear_notification_prop(window)
         with _notification_lock:
             current = threading.current_thread()
             if current in _active_notification_threads:
                 _active_notification_threads.remove(current)
+            if _current_notification is window:
+                _notification_showing = False
 
 
 def show_notification(message: str, duration: int = DEFAULT_NOTIFICATION_DURATION) -> None:
     """通过插件自带 XML 窗口显示通知（非阻塞，窗口到时间自动关闭）。"""
-    global _current_notification
+    global _current_notification, _notification_showing
     try:
         window = NotificationWindow(_select_notification_xml(message), ADDON_PATH)
 
         with _notification_lock:
             previous = _current_notification
             _current_notification = window
+            _notification_showing = True
 
         # 新通知到来时先关掉上一条，避免多窗口叠加
         if previous is not None:
             previous.request_close()
+
+        _mark_notification_showing(window, duration)
 
         modal_thread = threading.Thread(target=_run_notification_window, args=(window,), daemon=True)
         present_thread = threading.Thread(
@@ -234,6 +278,40 @@ def show_notification(message: str, duration: int = DEFAULT_NOTIFICATION_DURATIO
         present_thread.start()
     except Exception as e:
         log(f"Failed to show notification: {e}", xbmc.LOGERROR)
+
+
+def is_notification_showing() -> bool:
+    """当前是否有通知窗口正在显示（跨进程）。
+
+    通知可能由 default.py 或 service.py 弹出，两者是不同进程，
+    因此以 Window(10000) 属性为准；属性里带截止时间，进程异常退出也不会残留。
+    """
+    try:
+        raw = xbmcgui.Window(10000).getProperty(NOTIFICATION_PROP) or ""
+    except Exception:
+        raw = ""
+    if raw:
+        try:
+            return time.time() < float(raw.rpartition("|")[2])
+        except ValueError:
+            return False
+    with _notification_lock:
+        return _notification_showing
+
+
+def close_current_notification() -> None:
+    """立即关闭当前显示中的通知窗口（供倒计时窗口等需要互斥的场景调用）。"""
+    global _current_notification, _notification_showing
+    with _notification_lock:
+        window = _current_notification
+        _current_notification = None
+        _notification_showing = False
+    if window is not None:
+        try:
+            window.request_close()
+        except Exception as e:
+            log(f"Failed to close current notification: {e}", xbmc.LOGERROR)
+        _clear_notification_prop(window)
 
 
 def wait_for_notifications(timeout_ms: int = 6000) -> None:
@@ -572,6 +650,9 @@ def get_next_episode_from_library(tvshowid: Any, current_file: Optional[str] = N
             return None
 
         episodes: List[Dict[str, Any]] = result.get("episodes", [])
+        # Kodi 的 "episode" 排序只按集号，跨季时顺序可能交错；
+        # 本地按 (season, episode) 重排，确保 next_index 取到的是真正的下一集
+        episodes.sort(key=lambda ep: (ep.get("season") or 0, ep.get("episode") or 0))
         current_index = -1
 
         if current_episode_num is not None and current_season_num is not None:
@@ -726,6 +807,14 @@ def mark_current_episode_as_watched() -> bool:
 
     episode_id = state.get("episodeid")
     if not episode_id or episode_id == -1:
+        # 兜底：按 tvshowid + 季集回查媒体库（目录模式无库记录，直接跳过）
+        tvshow_id = state.get("tvshowid")
+        season_no = state.get("season")
+        episode_no = state.get("episode")
+        if tvshow_id in (None, -1) or season_no is None or episode_no is None:
+            return False
+        episode_id = get_current_episode_id(tvshow_id, season_no, episode_no)
+    if not episode_id or episode_id == -1:
         return False
 
     result = jsonrpc_call(
@@ -800,6 +889,22 @@ def get_parent_media_path(path: str) -> Optional[str]:
     return normalized[:last_sep]
 
 
+def _extract_episode_id(item_data: Dict[str, Any]) -> Optional[int]:
+    """从 Player.GetItem 返回的 item 中取 episodeid。
+
+    Player.GetItem 的 properties 不支持 "episodeid"（不在 List.Fields.All 中，
+    请求会导致 InvalidParams），但 List.Item.Base 的 "id" 对剧集条目就是 episodeid。
+    """
+    if item_data.get("type") != "episode":
+        return None
+    item_id = item_data.get("id")
+    try:
+        item_id = int(item_id)
+    except (TypeError, ValueError):
+        return None
+    return item_id if item_id > 0 else None
+
+
 def get_active_video_playlist_state() -> Optional[Dict[str, Any]]:
     cached, hit = _get_cached_data('playlist_state')
     if hit:
@@ -853,6 +958,8 @@ def get_active_video_playlist_state() -> Optional[Dict[str, Any]]:
         "position": current_position,
         "file": item_data.get("file") or "",
         "tvshowid": item_data.get("tvshowid"),
+        # List.Item.Base 的 id 对剧集条目即 episodeid（无需请求，随响应返回）
+        "episodeid": _extract_episode_id(item_data),
         "season": season_no,
         "episode": episode_no,
         "showtitle": item_data.get("showtitle") or "",

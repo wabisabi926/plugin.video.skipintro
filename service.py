@@ -15,7 +15,9 @@ from common import (
     get_next_file_in_directory, play_file, extract_media_info_from_filename,
     State, mark_current_episode_as_watched, get_season_episode_from_state,
     SETTINGS, PLAYBACK_STOP_TIMEOUT_MS, PLAYBACK_STOP_INTERVAL_MS,
-    show_notification, COUNTDOWN_SECONDS, OUTRO_RESET_BUFFER, MAIN_LOOP_INTERVAL,
+    show_notification, close_current_notification, is_notification_showing,
+    COUNTDOWN_SECONDS, OUTRO_RESET_BUFFER, OUTRO_NOTIFICATION_WAIT,
+    MAIN_LOOP_INTERVAL,
     DEFAULT_NOTIFICATION_DURATION, NOTIFICATION_DURATION_LONG
 )
 
@@ -87,6 +89,10 @@ class PlayerMonitor(xbmc.Player):
         self.current_outro_time: Optional[float] = None
         self.outro_triggered: bool = False
         self.cancel_skip: bool = False
+        # 等待通知播完再启动倒计时的截止时间（None 表示未在等待）
+        self.pending_outro_deadline: Optional[float] = None
+        # 刚记录过跳过点：等通知出现并消失后再起倒计时（带过期时间，避免状态残留）
+        self.await_notification_until: Optional[float] = None
         self.state: State = State()
         self._cached_playing_state: Optional[bool] = None
         self._state_cache_time: float = 0
@@ -108,6 +114,8 @@ class PlayerMonitor(xbmc.Player):
         self.state.playing_next = False
         self.current_outro_time = None
         self.outro_triggered = False
+        self.pending_outro_deadline = None
+        self.await_notification_until = None
         self.check_intro()
         self.retry_update_outro()
         autofill_playlist_for_current_video()
@@ -343,6 +351,8 @@ def has_next_episode() -> bool:
 def handle_outro_enter(countdown_state: CountdownState) -> None:
     countdown_state.active = True
     countdown_state.remaining = COUNTDOWN_SECONDS
+    # 倒计时窗口与通知窗口位置相同，先关闭残留通知，避免视觉叠加
+    close_current_notification()
     countdown_state.window, countdown_state.thread = create_countdown_window()
 
     tvshow_id, show_title, season, source_type = get_current_tvshow_info()
@@ -413,7 +423,12 @@ if __name__ == '__main__':
         if xbmcgui.Window(10000).getProperty("MFG.Reload") == "true":
             xbmcgui.Window(10000).clearProperty("MFG.Reload")
             player.update_outro_info()
-            countdown_state.active = False
+            if countdown_state.active:
+                countdown_state.cleanup()
+            # 记录/修改跳过点后：重置等待窗口，并等 default.py 弹出的记录通知出现并消失
+            # （service 与 default.py 是不同进程，通知可能晚于 MFG.Reload 出现）
+            player.pending_outro_deadline = None
+            player.await_notification_until = time.time() + OUTRO_NOTIFICATION_WAIT
 
         if player.is_video_playing() and player.current_outro_time:
             try:
@@ -421,10 +436,25 @@ if __name__ == '__main__':
                 trigger_time = player.current_outro_time
 
                 if current_time < trigger_time - OUTRO_RESET_BUFFER:
+                    player.pending_outro_deadline = None
                     reset_outro_state(countdown_state, player)
                 elif not player.outro_triggered and not player.cancel_skip:
                     if not countdown_state.active:
-                        if not has_next_episode():
+                        now = time.time()
+                        if player.pending_outro_deadline is None:
+                            player.pending_outro_deadline = now + OUTRO_NOTIFICATION_WAIT
+                        showing = is_notification_showing()
+                        if showing:
+                            player.await_notification_until = None
+                        awaiting = (player.await_notification_until is not None
+                                    and now < player.await_notification_until)
+                        if (showing or awaiting) and now < player.pending_outro_deadline:
+                            # 通知（如"已记录片尾"）仍在显示或即将出现：等它播完再起倒计时，
+                            # 避免窗口叠加；等待期间不消耗倒计时，仍是完整 COUNTDOWN_SECONDS 秒
+                            pass
+                        elif not has_next_episode():
+                            player.pending_outro_deadline = None
+                            player.await_notification_until = None
                             show_notification(
                                 SETTINGS.get_string(32032),
                                 duration=NOTIFICATION_DURATION_LONG
@@ -432,6 +462,8 @@ if __name__ == '__main__':
                             mark_current_episode_as_watched()
                             player.outro_triggered = True
                         else:
+                            player.pending_outro_deadline = None
+                            player.await_notification_until = None
                             handle_outro_enter(countdown_state)
                     else:
                         if not xbmc.getCondVisibility("Player.Paused"):
