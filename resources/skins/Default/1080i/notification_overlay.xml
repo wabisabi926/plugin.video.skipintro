@@ -6,12 +6,12 @@
             <top>0</top>
             <right>40</right>
             <width>900</width>
-            <height>60</height>
+            <height>72</height>
             <control type="image" id="101">
                 <left>640</left>
                 <top>108</top>
                 <width>260</width>
-                <height>60</height>
+                <height>72</height>
                 <texture border="20">dialogs/glass_flat.png</texture>
                 <colordiffuse>B0262626</colordiffuse>
             </control>
@@ -19,10 +19,10 @@
                 <left>660</left>
                 <top>108</top>
                 <width>220</width>
-                <height>60</height>
+                <height>72</height>
                 <align>center</align>
                 <aligny>center</aligny>
-                <font>font25_title</font>
+                <font>font14</font>
                 <textcolor>white</textcolor>
                 <shadowcolor>FF000000</shadowcolor>
                 <label></label>

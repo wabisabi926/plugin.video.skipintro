@@ -105,10 +105,10 @@ NOTIFICATION_WINDOW_XML = "notification_overlay.xml"
 NOTIFICATION_LABEL_ID = 100
 NOTIFICATION_IMAGE_ID = 101
 NOTIFICATION_MAX_WIDTH = 900        # XML 里 group 的固定宽度，窗口不会超过它
-NOTIFICATION_SIDE_PADDING = 20      # 文字左右内边距
+NOTIFICATION_SIDE_PADDING = 8       # 文字左右内边距
 NOTIFICATION_MIN_WIDTH = 0          # 窗口宽度下限，0 表示完全贴合文本
-NOTIFICATION_FONT_EM = 25.0         # font25_title 在 720p 基准下的 em 尺寸
-NOTIFICATION_WIDTH_SAFETY = 1.06    # 宽度估算余量，避免字体实际略宽时被裁
+NOTIFICATION_FONT_EM = 32.0         # font14 在 720p 基准下的 em 尺寸（导火线 32 / Estuary 33）
+NOTIFICATION_WIDTH_SAFETY = 1.02    # 宽度估算余量，吸收字体渲染的 kerning/hinting 差异
 NOTIFICATION_BASE_COLOR = "262626"  # 通知条底色（RGB），透明度由设置项控制
 NOTIFICATION_OPACITY_DEFAULT = 80   # 默认不透明度（%）
 NOTIFICATION_TOP_DEFAULT = 10       # 通知条垂直位置（占屏幕高度的百分比）
@@ -151,19 +151,19 @@ def _clear_notification_prop(window: "NotificationWindow") -> None:
 
 
 def _char_width_ratio(ch: str) -> float:
-    """单个字符相对 em 的宽度系数（按 NotoSans-Bold 近似）。"""
+    """单个字符相对 em 的宽度系数（按 NotoSans 实测近似值）。"""
     code = ord(ch)
     if code > 0x2E80:      # CJK 汉字与全角标点
         return 1.0
     if ch == " ":
         return 0.26
     if "0" <= ch <= "9":
-        return 0.60
+        return 0.57
     if "A" <= ch <= "Z":
-        return 0.68
+        return 0.65
     if "a" <= ch <= "z":
-        return 0.55
-    return 0.35
+        return 0.52
+    return 0.33
 
 
 def measure_notification_text(text: str) -> float:
@@ -231,6 +231,17 @@ def apply_notification_layout(window: Any, text: str) -> bool:
                 log_warning(
                     f"Notification label width not applied: got {actual}, expected {label_width}"
                 )
+
+        # 诊断输出：确认 setPosition / setWidth 是否真的生效
+        log_debug(
+            f"Layout: text={measure_notification_text(text):.0f}px, window={width}, "
+            f"left={left}, top={top}({top_pct}%), screen_h={screen_height}"
+        )
+        if image:
+            log_debug(f"  image: pos={image.getPosition()}, size={image.getWidth()}x{image.getHeight()}")
+        if label:
+            log_debug(f"  label: pos={label.getPosition()}, size={label.getWidth()}x{label.getHeight()}")
+
         return True
     except Exception as e:
         log(f"Failed to apply notification layout: {e}", xbmc.LOGERROR)
