@@ -50,8 +50,10 @@ jobs:
           # Kodi 要求 zip 内顶层目录必须是插件 ID
           rsync -a \
             --exclude '.git' \
+            --exclude '.gitignore' \
             --exclude '.github' \
             --exclude '.workbuddy-ai' \
+            --exclude 'tests' \
             --exclude '__pycache__' \
             --exclude '*.pyc' \
             --exclude 'CHANGELOG.md' \
