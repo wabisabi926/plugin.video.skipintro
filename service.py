@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 import time
+import math
 import threading
 from typing import Optional, Tuple
 
@@ -16,9 +17,10 @@ from common import (
     State, mark_current_episode_as_watched, get_season_episode_from_state,
     SETTINGS, PLAYBACK_STOP_TIMEOUT_MS, PLAYBACK_STOP_INTERVAL_MS,
     show_notification, close_current_notification, is_notification_showing,
-    COUNTDOWN_SECONDS, OUTRO_RESET_BUFFER, OUTRO_NOTIFICATION_WAIT,
+    apply_notification_layout, NOTIFICATION_LABEL_ID,
+    OUTRO_RESET_BUFFER, notification_max_wait,
     MAIN_LOOP_INTERVAL,
-    DEFAULT_NOTIFICATION_DURATION, NOTIFICATION_DURATION_LONG
+    NOTIFICATION_DURATION_LONG
 )
 
 
@@ -27,6 +29,7 @@ class SkipCountdownWindow(xbmcgui.WindowXMLDialog):
         xbmcgui.WindowXMLDialog.__init__(self, *args, **kwargs)
         self.cancelled = False
         self.is_ready = False
+        self._layout_applied = False
 
     def onInit(self):
         self.is_ready = True
@@ -57,8 +60,11 @@ class SkipCountdownWindow(xbmcgui.WindowXMLDialog):
         if not self.is_ready:
             return
         try:
-            ctrl = self.getControl(100)
+            ctrl = self.getControl(NOTIFICATION_LABEL_ID)
             if ctrl:
+                # 倒计时每秒刷新文案，窗口宽度只需在首次按文本定好
+                if not self._layout_applied:
+                    self._layout_applied = apply_notification_layout(self, text)
                 ctrl.setLabel(text)
         except Exception as e:
             log(f"Error updating countdown text: {e}", xbmc.LOGERROR)
@@ -74,13 +80,23 @@ class CountdownState:
         self.episode_num: int = 0
 
     def cleanup(self) -> None:
-        if self.window:
-            self.window.close()
-            if self.thread and self.thread.is_alive():
-                self.thread.join(timeout=1.0)
+        # 先重置状态再关窗口：close/join 抛异常时状态不会残留，
+        # 否则 active 卡在 True 会导致本集之后再也不起倒计时
+        window = self.window
+        thread = self.thread
         self.window = None
         self.thread = None
         self.active = False
+        if window:
+            try:
+                window.close()
+            except Exception as e:
+                log(f"Error closing countdown window: {e}", xbmc.LOGERROR)
+        if thread and thread.is_alive():
+            try:
+                thread.join(timeout=1.0)
+            except Exception as e:
+                log(f"Error joining countdown thread: {e}", xbmc.LOGERROR)
 
 
 class PlayerMonitor(xbmc.Player):
@@ -224,8 +240,13 @@ class PlayerMonitor(xbmc.Player):
 def create_countdown_window() -> Tuple[Optional[SkipCountdownWindow], Optional[threading.Thread]]:
     try:
         window = SkipCountdownWindow("notification_overlay.xml", ADDON_PATH)
-        thread = threading.Thread(target=window.doModal)
+        # daemon：窗口若因异常没能关闭，也不会拖住 Kodi 退出
+        thread = threading.Thread(target=window.doModal, daemon=True)
         thread.start()
+        # 等控件就绪再返回，否则窗口会先以 XML 里的默认窄条空闪一下
+        ready_deadline = time.time() + 1.0
+        while time.time() < ready_deadline and not window.is_ready:
+            xbmc.sleep(20)
         return window, thread
     except Exception as e:
         log(f"Error creating countdown window: {e}", xbmc.LOGERROR)
@@ -348,9 +369,45 @@ def has_next_episode() -> bool:
     return False
 
 
-def handle_outro_enter(countdown_state: CountdownState) -> None:
+def _countdown_display_seconds(remaining: float) -> int:
+    """倒计时显示的秒数：向上取整。
+
+    原来用 int(remaining) + 1，首帧 remaining 还是完整值时会多显示 1 秒
+    （设 6 秒却显示"7 秒内"），暂停时 remaining 不减也会一直多 1。
+    """
+    return max(1, int(math.ceil(remaining - 1e-6)))
+
+
+def _effective_countdown_seconds(player: PlayerMonitor) -> float:
+    """实际倒计时秒数：不超过当前距离视频结束的剩余时间。
+
+    倒计时是从片尾点起算的，如果用户记录的片尾比设置的倒计时还短（或者刚记录完
+    片尾点时通知占用了一部分时间），倒计时会走不完——视频先播完，is_video_playing()
+    变 False，倒计时停止推进，本集就再也不会自动跳转。
+    这里按「当前剩余时长 - 1 秒」封顶，保证倒计时一定能在片尾内走完。
+    """
+    configured = float(SETTINGS.countdown_seconds)
+    try:
+        total_time = player.getTotalTime()
+        current_time = player.getTime()
+        if total_time > 0:
+            left = total_time - current_time
+            if left > 0:
+                effective = max(1.0, min(configured, left - 1.0))
+                if effective < configured:
+                    log_debug(
+                        f"Countdown shortened {configured:.0f}s -> {effective:.0f}s, "
+                        f"only {left:.1f}s left in episode"
+                    )
+                return effective
+    except Exception as e:
+        log(f"Failed to compute effective countdown: {e}", xbmc.LOGWARNING)
+    return configured
+
+
+def handle_outro_enter(countdown_state: CountdownState, player: PlayerMonitor) -> None:
     countdown_state.active = True
-    countdown_state.remaining = COUNTDOWN_SECONDS
+    countdown_state.remaining = _effective_countdown_seconds(player)
     # 倒计时窗口与通知窗口位置相同，先关闭残留通知，避免视觉叠加
     close_current_notification()
     countdown_state.window, countdown_state.thread = create_countdown_window()
@@ -366,7 +423,7 @@ def handle_outro_enter(countdown_state: CountdownState) -> None:
         countdown_state.window.update_text(
             SETTINGS.get_string(32003)
             % (countdown_state.season_num, countdown_state.episode_num,
-               int(countdown_state.remaining) + 1)
+               _countdown_display_seconds(countdown_state.remaining))
         )
 
 
@@ -394,7 +451,7 @@ def update_countdown_ui(countdown_state: CountdownState, player: PlayerMonitor) 
         return
 
     try:
-        display_seconds = int(countdown_state.remaining) + 1
+        display_seconds = _countdown_display_seconds(countdown_state.remaining)
         if countdown_state.window and countdown_state.window.is_ready:
             countdown_state.window.update_text(
                 SETTINGS.get_string(32003)
@@ -428,7 +485,7 @@ if __name__ == '__main__':
             # 记录/修改跳过点后：重置等待窗口，并等 default.py 弹出的记录通知出现并消失
             # （service 与 default.py 是不同进程，通知可能晚于 MFG.Reload 出现）
             player.pending_outro_deadline = None
-            player.await_notification_until = time.time() + OUTRO_NOTIFICATION_WAIT
+            player.await_notification_until = time.time() + notification_max_wait()
 
         if player.is_video_playing() and player.current_outro_time:
             try:
@@ -442,7 +499,7 @@ if __name__ == '__main__':
                     if not countdown_state.active:
                         now = time.time()
                         if player.pending_outro_deadline is None:
-                            player.pending_outro_deadline = now + OUTRO_NOTIFICATION_WAIT
+                            player.pending_outro_deadline = now + notification_max_wait()
                         showing = is_notification_showing()
                         if showing:
                             player.await_notification_until = None
@@ -450,7 +507,7 @@ if __name__ == '__main__':
                                     and now < player.await_notification_until)
                         if (showing or awaiting) and now < player.pending_outro_deadline:
                             # 通知（如"已记录片尾"）仍在显示或即将出现：等它播完再起倒计时，
-                            # 避免窗口叠加；等待期间不消耗倒计时，仍是完整 COUNTDOWN_SECONDS 秒
+                            # 避免窗口叠加；等待期间不消耗倒计时，仍是设置里的完整秒数
                             pass
                         elif not has_next_episode():
                             player.pending_outro_deadline = None
@@ -464,7 +521,7 @@ if __name__ == '__main__':
                         else:
                             player.pending_outro_deadline = None
                             player.await_notification_until = None
-                            handle_outro_enter(countdown_state)
+                            handle_outro_enter(countdown_state, player)
                     else:
                         if not xbmc.getCondVisibility("Player.Paused"):
                             countdown_state.remaining -= dt

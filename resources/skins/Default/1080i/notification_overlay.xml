@@ -3,23 +3,23 @@
     <zorder>3</zorder>
     <controls>
         <control type="group">
-            <top>56</top>
+            <top>0</top>
             <right>40</right>
-            <width>820</width>
-            <height>80</height>
-            <control type="image">
-                <left>0</left>
-                <top>0</top>
-                <width>820</width>
-                <height>80</height>
+            <width>900</width>
+            <height>60</height>
+            <control type="image" id="101">
+                <left>640</left>
+                <top>108</top>
+                <width>260</width>
+                <height>60</height>
                 <texture border="20">dialogs/glass_flat.png</texture>
                 <colordiffuse>B0262626</colordiffuse>
             </control>
             <control type="label" id="100">
-                <left>20</left>
-                <top>0</top>
-                <width>780</width>
-                <height>80</height>
+                <left>660</left>
+                <top>108</top>
+                <width>220</width>
+                <height>60</height>
                 <align>center</align>
                 <aligny>center</aligny>
                 <font>font25_title</font>

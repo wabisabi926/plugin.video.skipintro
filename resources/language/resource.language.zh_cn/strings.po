@@ -167,3 +167,48 @@ msgstr "确定要删除所有记录点吗？此操作不可撤销。"
 msgctxt "#32035"
 msgid "All skip points deleted"
 msgstr "已删除所有记录点"
+
+#: settings.xml
+msgctxt "#32036"
+msgid "Notifications"
+msgstr "通知"
+
+#: settings.xml
+msgctxt "#32037"
+msgid "Countdown duration (3-10 seconds)"
+msgstr "倒计时时长（3-10 秒）"
+
+#: settings.xml
+msgctxt "#32038"
+msgid "Seconds to count down before playing the next episode (3-60)."
+msgstr "片尾结束后倒数多少秒自动播放下一集"
+
+#: settings.xml
+msgctxt "#32039"
+msgid "Notification duration (3-10 seconds)"
+msgstr "通知停留时长（3-10 秒）"
+
+#: settings.xml
+msgctxt "#32040"
+msgid "How long a notification stays on screen (3-5)."
+msgstr "普通提示在屏幕上停留的秒数"
+
+#: settings.xml
+msgctxt "#32041"
+msgid "Notification opacity (%)"
+msgstr "通知条透明度（%）"
+
+#: settings.xml
+msgctxt "#32042"
+msgid "30-100. Lower is more transparent; below 30 the text gets hard to read."
+msgstr "30-100，数值越小越透明；低于 30 文字会看不清"
+
+#: settings.xml
+msgctxt "#32043"
+msgid "Notification vertical position (0-200)"
+msgstr "通知条垂直位置（%）"
+
+#: settings.xml
+msgctxt "#32044"
+msgid "0-90. Larger moves it down; 10% stays within the top black bar of 2.39:1 movies."
+msgstr "0-90，数值越大越靠下；10% 位于 2.39:1 影片的上黑边内"

@@ -6,6 +6,7 @@ import json
 import os
 import re
 import time
+import math
 import threading
 import xbmcaddon
 import shutil
@@ -35,7 +36,7 @@ PLAYLIST_MUTATION_DELAY_MS = 300
 # Playback control
 PLAYBACK_STOP_TIMEOUT_MS = 5000
 PLAYBACK_STOP_INTERVAL_MS = 100
-DEFAULT_NOTIFICATION_DURATION = 2000
+DEFAULT_NOTIFICATION_DURATION = 3000   # 普通通知兜底停留时长（毫秒），实际以设置项 3-10 秒为准
 NOTIFICATION_DURATION_LONG = 5000
 
 # Skip thresholds (percentage)
@@ -98,10 +99,21 @@ def log_debug(msg: str, prefix: str = "[SkipIntro]") -> None:
         log(msg, prefix, xbmc.LOGDEBUG)
 
 
-# 通知窗口：长/短两套皮肤，按文字显示宽度选择
+# 通知窗口：单个皮肤窗口，运行时按文本宽度调整控件尺寸，
+# 等价于 Kodi 原生 Notification 的自适应宽度（见 apply_notification_layout）
 NOTIFICATION_WINDOW_XML = "notification_overlay.xml"
-NOTIFICATION_WINDOW_XML_SHORT = "notification_short.xml"
-NOTIFICATION_SHORT_MAX_DISPLAY_WIDTH = 34
+NOTIFICATION_LABEL_ID = 100
+NOTIFICATION_IMAGE_ID = 101
+NOTIFICATION_MAX_WIDTH = 900        # XML 里 group 的固定宽度，窗口不会超过它
+NOTIFICATION_SIDE_PADDING = 20      # 文字左右内边距
+NOTIFICATION_MIN_WIDTH = 0          # 窗口宽度下限，0 表示完全贴合文本
+NOTIFICATION_FONT_EM = 25.0         # font25_title 在 720p 基准下的 em 尺寸
+NOTIFICATION_WIDTH_SAFETY = 1.06    # 宽度估算余量，避免字体实际略宽时被裁
+NOTIFICATION_BASE_COLOR = "262626"  # 通知条底色（RGB），透明度由设置项控制
+NOTIFICATION_OPACITY_DEFAULT = 80   # 默认不透明度（%）
+NOTIFICATION_TOP_DEFAULT = 10       # 通知条垂直位置（占屏幕高度的百分比）
+NOTIFICATION_TOP_MIN = 0
+NOTIFICATION_TOP_MAX = 90
 
 _notification_lock = threading.Lock()
 _active_notification_threads: List[threading.Thread] = []
@@ -138,16 +150,91 @@ def _clear_notification_prop(window: "NotificationWindow") -> None:
         log(f"Failed to clear notification property: {e}", xbmc.LOGWARNING)
 
 
-def _display_width(text: str) -> int:
-    """估算显示宽度：CJK/全角字符按 2，其余按 1。"""
-    return sum(2 if ord(ch) > 0x2E80 else 1 for ch in text)
+def _char_width_ratio(ch: str) -> float:
+    """单个字符相对 em 的宽度系数（按 NotoSans-Bold 近似）。"""
+    code = ord(ch)
+    if code > 0x2E80:      # CJK 汉字与全角标点
+        return 1.0
+    if ch == " ":
+        return 0.26
+    if "0" <= ch <= "9":
+        return 0.60
+    if "A" <= ch <= "Z":
+        return 0.68
+    if "a" <= ch <= "z":
+        return 0.55
+    return 0.35
 
 
-def _select_notification_xml(message: str) -> str:
-    """按文字显示宽度选择长文本或短文本窗口。"""
-    if _display_width(message) <= NOTIFICATION_SHORT_MAX_DISPLAY_WIDTH:
-        return NOTIFICATION_WINDOW_XML_SHORT
-    return NOTIFICATION_WINDOW_XML
+def measure_notification_text(text: str) -> float:
+    """估算文本在 font25_title 下的渲染宽度（1080i 皮肤坐标）。"""
+    return sum(_char_width_ratio(ch) for ch in text) * NOTIFICATION_FONT_EM
+
+
+def notification_window_width(text: str) -> int:
+    """按文本宽度算出窗口宽度（含两侧内边距），并限制在配置区间内。"""
+    text_width = measure_notification_text(text) * NOTIFICATION_WIDTH_SAFETY
+    width = int(math.ceil(text_width)) + NOTIFICATION_SIDE_PADDING * 2
+    return max(NOTIFICATION_MIN_WIDTH, min(width, NOTIFICATION_MAX_WIDTH))
+
+
+def notification_background_color() -> str:
+    """按设置里的不透明度生成通知条背景色（AARRGGBB）。"""
+    opacity = SETTINGS.notification_opacity
+    alpha = max(0, min(255, int(opacity * 255 / 100.0 + 0.5)))
+    return f"{alpha:02X}{NOTIFICATION_BASE_COLOR}"
+
+
+def notification_max_wait() -> float:
+    """等待通知消失的最长时间。
+
+    不低于 OUTRO_NOTIFICATION_WAIT，并且要覆盖一条通知的完整停留时长，
+    否则通知比等待窗口还长时，倒计时会叠在通知上。
+    """
+    return max(OUTRO_NOTIFICATION_WAIT, SETTINGS.notification_seconds + 1.0)
+
+
+def apply_notification_layout(window: Any, text: str) -> bool:
+    """按文本宽度调整背景与文本控件：右边缘锚定，左边缘随文字伸缩。
+
+    XML 里 group 固定为 NOTIFICATION_MAX_WIDTH 宽并靠右，这里把背景和文本
+    重新定位到 group 的右侧，宽度贴合文本，等价于原生通知的自适应效果。
+    """
+    try:
+        width = notification_window_width(text)
+        left = NOTIFICATION_MAX_WIDTH - width
+        # 百分比换算成当前皮肤坐标（1080i 皮肤下 10% = 108，720p 皮肤下 = 72，比例一致）
+        screen_height = window.getHeight() or 1080
+        top_pct = SETTINGS.notification_top_pct
+        top = int(screen_height * top_pct / 100)
+
+        image = window.getControl(NOTIFICATION_IMAGE_ID)
+        if image:
+            image.setPosition(left, top)
+            image.setWidth(width)
+            try:
+                color = notification_background_color()
+                image.setColorDiffuse(color)
+                log_debug(
+                    f"Notification layout: width={width}, top={top}({top_pct}%), color={color}"
+                )
+            except Exception as e:
+                log(f"Failed to apply notification opacity: {e}", xbmc.LOGWARNING)
+
+        label = window.getControl(NOTIFICATION_LABEL_ID)
+        if label:
+            label_width = width - NOTIFICATION_SIDE_PADDING * 2
+            label.setPosition(left + NOTIFICATION_SIDE_PADDING, top)
+            label.setWidth(label_width)
+            actual = label.getWidth()
+            if actual != label_width:
+                log_warning(
+                    f"Notification label width not applied: got {actual}, expected {label_width}"
+                )
+        return True
+    except Exception as e:
+        log(f"Failed to apply notification layout: {e}", xbmc.LOGERROR)
+        return False
 
 
 class NotificationWindow(xbmcgui.WindowXMLDialog):
@@ -157,6 +244,7 @@ class NotificationWindow(xbmcgui.WindowXMLDialog):
         xbmcgui.WindowXMLDialog.__init__(self, *args, **kwargs)
         self.is_ready = False
         self._closed = False
+        self._layout_applied = False
 
     def onInit(self):
         self.is_ready = True
@@ -164,8 +252,11 @@ class NotificationWindow(xbmcgui.WindowXMLDialog):
     def set_message(self, message: str) -> bool:
         """写入文本；控件尚未就绪时返回 False，便于调用方轮询重试。"""
         try:
-            ctrl = self.getControl(100)
+            ctrl = self.getControl(NOTIFICATION_LABEL_ID)
             if ctrl:
+                # 首次写入时按文本宽度定好窗口尺寸，之后只更新文字
+                if not self._layout_applied:
+                    self._layout_applied = apply_notification_layout(self, message)
                 ctrl.setLabel(message)
                 return True
         except Exception as e:
@@ -250,11 +341,16 @@ def _present_notification(window: "NotificationWindow", message: str, duration: 
                 _notification_showing = False
 
 
-def show_notification(message: str, duration: int = DEFAULT_NOTIFICATION_DURATION) -> None:
-    """通过插件自带 XML 窗口显示通知（非阻塞，窗口到时间自动关闭）。"""
+def show_notification(message: str, duration: Optional[int] = None) -> None:
+    """通过插件自带 XML 窗口显示通知（非阻塞，窗口到时间自动关闭）。
+
+    duration 不传时按设置项「通知停留时长」取值（默认 3 秒）。
+    """
     global _current_notification, _notification_showing
+    if duration is None:
+        duration = SETTINGS.notification_seconds * 1000
     try:
-        window = NotificationWindow(_select_notification_xml(message), ADDON_PATH)
+        window = NotificationWindow(NOTIFICATION_WINDOW_XML, ADDON_PATH)
 
         with _notification_lock:
             previous = _current_notification
@@ -314,12 +410,15 @@ def close_current_notification() -> None:
         _clear_notification_prop(window)
 
 
-def wait_for_notifications(timeout_ms: int = 6000) -> None:
+def wait_for_notifications(timeout_ms: Optional[int] = None) -> None:
     """等待进行中的通知窗口结束。
 
     短生命周期的脚本进程（如 default.py 的 RunScript）退出前调用，
     否则守护线程会随进程一起被销毁，窗口来不及显示。
+    不传 timeout 时按「通知停留时长 + 3 秒」算，保证能覆盖最长 10 秒的通知。
     """
+    if timeout_ms is None:
+        timeout_ms = SETTINGS.notification_seconds * 1000 + 3000
     deadline = time.time() + timeout_ms / 1000.0
     while time.time() < deadline:
         with _notification_lock:
@@ -382,6 +481,60 @@ class SettingsManager:
     def debug_mode(self) -> bool:
         value: Optional[str] = self._get_setting('debug_mode')
         return value == 'true'
+
+    def _get_int_setting(self, setting_id: str, default: int, minimum: int, maximum: int) -> int:
+        """读取数值型设置并限制在 [minimum, maximum]。
+
+        Kodi 的数字输入框不做范围校验（输入超范围也会原样保存，settings.xml 里的
+        <constraints> 不拦），所以越界时把修正后的值写回设置，避免设置页显示的
+        数字和实际生效的值不一致。
+        """
+        raw = self._get_setting(setting_id)
+        try:
+            value = int(float(raw))
+        except (TypeError, ValueError):
+            # 空串是 Kodi 尚未初始化的正常状态，静默用默认值；
+            # 非空却解析不了（比如手改配置文件写成 abc）则写回默认值，别让设置页一直显示脏值
+            if raw and str(raw).strip():
+                log(f"Setting '{setting_id}'='{raw}' is not a number, reset to {default}", xbmc.LOGWARNING)
+                self.set_setting(setting_id, default)
+            return default
+        clamped = max(minimum, min(value, maximum))
+        if clamped != value:
+            log(
+                f"Setting '{setting_id}'={value} out of range [{minimum}, {maximum}], "
+                f"corrected to {clamped}",
+                xbmc.LOGWARNING,
+            )
+            self.set_setting(setting_id, clamped)
+        return clamped
+
+    @property
+    def countdown_seconds(self) -> int:
+        """片尾倒计时秒数，设置项可调（3-10）。"""
+        return self._get_int_setting('countdown_seconds', COUNTDOWN_SECONDS, 3, 10)
+
+    @property
+    def notification_seconds(self) -> int:
+        """普通通知停留秒数，设置项可调（3-10）。"""
+        return self._get_int_setting(
+            'notification_seconds', DEFAULT_NOTIFICATION_DURATION // 1000, 3, 10
+        )
+
+    @property
+    def notification_opacity(self) -> int:
+        """通知条不透明度百分比，设置项可调（30-100）。"""
+        return self._get_int_setting(
+            'notification_opacity', NOTIFICATION_OPACITY_DEFAULT, 30, 100
+        )
+
+    @property
+    def notification_top_pct(self) -> int:
+        """通知条垂直位置（占屏幕高度的百分比），设置项可调（0-90）。"""
+        return self._get_int_setting(
+            'notification_top_pct', NOTIFICATION_TOP_DEFAULT,
+            NOTIFICATION_TOP_MIN, NOTIFICATION_TOP_MAX
+        )
 
     def get_string(self, string_id: int) -> str:
         try:

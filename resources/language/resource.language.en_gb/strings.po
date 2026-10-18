@@ -31,7 +31,7 @@ msgstr "Outro skip cancelled"
 #: service.py
 msgctxt "#32003"
 msgid "Playing next episode... Press \"Back\" within %d seconds to cancel"
-msgstr "S%02dE%02d about to finish, cancel outro skip by pressing \"Back\" within %d seconds"
+msgstr "S%02dE%02d ends in %ds - Back to cancel"
 
 #: default.py
 msgctxt "#32004"
@@ -91,7 +91,7 @@ msgstr "No outro record"
 #: default.py
 msgctxt "#32015"
 msgid "Delete failed!Please call within first or last 20% of the episode"
-msgstr "Delete failed!Please call within first or last 20% of the episode"
+msgstr "Delete failed - only within first/last 20%"
 
 #: default.py
 msgctxt "#32016"
@@ -167,3 +167,48 @@ msgstr "Are you sure you want to delete all skip points? This action cannot be u
 msgctxt "#32035"
 msgid "All skip points deleted"
 msgstr "All skip points deleted"
+
+#: settings.xml
+msgctxt "#32036"
+msgid "Notifications"
+msgstr "Notifications"
+
+#: settings.xml
+msgctxt "#32037"
+msgid "Countdown duration (3-10 seconds)"
+msgstr "Countdown duration (3-10 seconds)"
+
+#: settings.xml
+msgctxt "#32038"
+msgid "Seconds to count down before playing the next episode (3-60)."
+msgstr "Seconds to count down before playing the next episode (3-60)."
+
+#: settings.xml
+msgctxt "#32039"
+msgid "Notification duration (3-10 seconds)"
+msgstr "Notification duration (3-10 seconds)"
+
+#: settings.xml
+msgctxt "#32040"
+msgid "How long a notification stays on screen (3-5)."
+msgstr "How long a notification stays on screen (3-5)."
+
+#: settings.xml
+msgctxt "#32041"
+msgid "Notification opacity (%)"
+msgstr "Notification opacity (%)"
+
+#: settings.xml
+msgctxt "#32042"
+msgid "30-100. Lower is more transparent; below 30 the text gets hard to read."
+msgstr "30-100. Lower is more transparent; below 30 the text gets hard to read."
+
+#: settings.xml
+msgctxt "#32043"
+msgid "Notification vertical position (0-200)"
+msgstr "Notification vertical position (%)"
+
+#: settings.xml
+msgctxt "#32044"
+msgid "0-90. Larger moves it down; 10% stays within the top black bar of 2.39:1 movies."
+msgstr "0-90. Larger moves it down; 10% stays within the top black bar of 2.39:1 movies."
