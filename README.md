@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.4.3-blue.svg)](https://github.com/wabisabi926/plugin.video.skipintro)
+[![Version](https://img.shields.io/badge/version-1.4.4-blue.svg)](https://github.com/wabisabi926/plugin.video.skipintro)
 [![License](https://img.shields.io/badge/license-NC--3.0-green.svg)](LICENSE.txt)
 [![Platform](https://img.shields.io/badge/platform-Kodi-orange.svg)](https://kodi.tv/)
 
@@ -277,6 +277,11 @@ RunScript(plugin.video.skipintro, ?mode=delete_skip_point)
 ---
 
 ## 更新日志
+
+### v1.4.4 (2026-10)
+- 🐛 **修复第三方皮肤字号回退**：改用 Estuary 与第三方皮肤（如导火线）均内置的 font14，避免字体名不存在时静默回退成小字
+- 📐 **通知条更协调**：高度调整为 72px，与 font14 字号更贴合
+- 🔧 **代码结构优化**：拆分为 common/media/playlist 三个模块，并新增单元测试与 CI 自动测试
 
 ### v1.4.3 (2026-10)
 - 📐 **通知条宽度自适应**：不再固定长短两档，宽度按文字实际长度贴合，两侧只留 20px 边距。短提示不再空一大截，长提示也不会溢出
