@@ -8,11 +8,12 @@ import xbmc
 import xbmcgui
 
 from common import (
-    load_skip_data, save_skip_data, get_current_tvshow_info,
+    load_skip_data, save_skip_data,
     log, SETTINGS, delete_all_skip_points,
     show_notification, wait_for_notifications, _parse_season_data,
     SKIP_THRESHOLD_INTRO, SKIP_THRESHOLD_OUTRO
 )
+from media import get_current_tvshow_info
 
 
 def get_current_playback_time() -> Tuple[float, float]:
