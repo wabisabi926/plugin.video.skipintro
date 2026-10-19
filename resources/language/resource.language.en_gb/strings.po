@@ -195,13 +195,13 @@ msgstr "How long a notification stays on screen (3-5)."
 
 #: settings.xml
 msgctxt "#32041"
-msgid "Notification opacity (%)"
-msgstr "Notification opacity (%)"
+msgid "Notification transparency (%)"
+msgstr "Notification transparency (%)"
 
 #: settings.xml
 msgctxt "#32042"
-msgid "30-100. Lower is more transparent; below 30 the text gets hard to read."
-msgstr "30-100. Lower is more transparent; below 30 the text gets hard to read."
+msgid "0-100. 0 is fully opaque, 100 is fully transparent (text only)."
+msgstr "0-100. 0 is fully opaque, 100 is fully transparent (text only)."
 
 #: settings.xml
 msgctxt "#32043"
@@ -212,3 +212,28 @@ msgstr "Notification vertical position (%)"
 msgctxt "#32044"
 msgid "0-90. Larger moves it down; 10% stays within the top black bar of 2.39:1 movies."
 msgstr "0-90. Larger moves it down; 10% stays within the top black bar of 2.39:1 movies."
+
+#: settings.xml
+msgctxt "#32045"
+msgid "Notification horizontal position"
+msgstr "Notification horizontal position"
+
+#: settings.xml
+msgctxt "#32046"
+msgid "Where the notification bar appears: left, center or right of the screen."
+msgstr "Where the notification bar appears: left, center or right of the screen."
+
+#: settings.xml
+msgctxt "#32047"
+msgid "Left"
+msgstr "Left"
+
+#: settings.xml
+msgctxt "#32048"
+msgid "Center"
+msgstr "Center"
+
+#: settings.xml
+msgctxt "#32049"
+msgid "Right"
+msgstr "Right"

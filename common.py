@@ -103,16 +103,25 @@ def log_debug(msg: str, prefix: str = "[SkipIntro]") -> None:
 NOTIFICATION_WINDOW_XML = "notification_overlay.xml"
 NOTIFICATION_LABEL_ID = 100
 NOTIFICATION_IMAGE_ID = 101
-NOTIFICATION_MAX_WIDTH = 900        # XML 里 group 的固定宽度，窗口不会超过它
+NOTIFICATION_MAX_WIDTH = 900        # 通知条最大宽度（文本再长也不超过它）
 NOTIFICATION_SIDE_PADDING = 8       # 文字左右内边距
 NOTIFICATION_MIN_WIDTH = 0          # 窗口宽度下限，0 表示完全贴合文本
 NOTIFICATION_FONT_EM = 32.0         # font14 在 720p 基准下的 em 尺寸（导火线 32 / Estuary 33）
 NOTIFICATION_WIDTH_SAFETY = 1.02    # 宽度估算余量，吸收字体渲染的 kerning/hinting 差异
-NOTIFICATION_BASE_COLOR = "262626"  # 通知条底色（RGB），透明度由设置项控制
-NOTIFICATION_OPACITY_DEFAULT = 80   # 默认不透明度（%）
+NOTIFICATION_BASE_COLOR = "000000"  # 通知条底色（RGB），透明度由设置项控制
+NOTIFICATION_TRANSPARENCY_DEFAULT = 20  # 默认透明度（%）：0 完全不透明，100 全透明
+NOTIFICATION_TRANSPARENCY_MIN = 0
+NOTIFICATION_TRANSPARENCY_MAX = 100
 NOTIFICATION_TOP_DEFAULT = 10       # 通知条垂直位置（占屏幕高度的百分比）
 NOTIFICATION_TOP_MIN = 0
 NOTIFICATION_TOP_MAX = 90
+NOTIFICATION_SIDE_MARGIN = 40       # 水平靠边时距屏幕边缘的留白（1080i 皮肤坐标）
+NOTIFICATION_ALIGN_LEFT = 0         # 水平位置：靠左
+NOTIFICATION_ALIGN_CENTER = 1       # 水平位置：居中
+NOTIFICATION_ALIGN_RIGHT = 2        # 水平位置：靠右（默认，与旧版行为一致）
+NOTIFICATION_ALIGN_DEFAULT = NOTIFICATION_ALIGN_RIGHT
+NOTIFICATION_ALIGN_MIN = NOTIFICATION_ALIGN_LEFT
+NOTIFICATION_ALIGN_MAX = NOTIFICATION_ALIGN_RIGHT
 
 _notification_lock = threading.Lock()
 _active_notification_threads: List[threading.Thread] = []
@@ -178,9 +187,12 @@ def notification_window_width(text: str) -> int:
 
 
 def notification_background_color() -> str:
-    """按设置里的不透明度生成通知条背景色（AARRGGBB）。"""
-    opacity = SETTINGS.notification_opacity
-    alpha = max(0, min(255, int(opacity * 255 / 100.0 + 0.5)))
+    """按设置里的透明度生成通知条背景色（AARRGGBB）。
+
+    透明度 0 = 完全不透明，100 = 完全透明（只剩文字）。
+    """
+    transparency = SETTINGS.notification_transparency
+    alpha = max(0, min(255, int((100 - transparency) * 255 / 100.0 + 0.5)))
     return f"{alpha:02X}{NOTIFICATION_BASE_COLOR}"
 
 
@@ -194,18 +206,27 @@ def notification_max_wait() -> float:
 
 
 def apply_notification_layout(window: Any, text: str) -> bool:
-    """按文本宽度调整背景与文本控件：右边缘锚定，左边缘随文字伸缩。
+    """按文本宽度调整背景与文本控件的位置和尺寸。
 
-    XML 里 group 固定为 NOTIFICATION_MAX_WIDTH 宽并靠右，这里把背景和文本
-    重新定位到 group 的右侧，宽度贴合文本，等价于原生通知的自适应效果。
+    水平位置由设置项 notification_h_align 控制（左/中/右），垂直位置由
+    notification_top_pct 控制；宽度始终贴合文本，最长不超过 NOTIFICATION_MAX_WIDTH。
     """
     try:
         width = notification_window_width(text)
-        left = NOTIFICATION_MAX_WIDTH - width
         # 百分比换算成当前皮肤坐标（1080i 皮肤下 10% = 108，720p 皮肤下 = 72，比例一致）
         screen_height = window.getHeight() or 1080
+        screen_width = window.getWidth() or 1920
         top_pct = SETTINGS.notification_top_pct
         top = int(screen_height * top_pct / 100)
+
+        align = SETTINGS.notification_h_align
+        margin = NOTIFICATION_SIDE_MARGIN
+        if align == NOTIFICATION_ALIGN_LEFT:
+            left = margin
+        elif align == NOTIFICATION_ALIGN_CENTER:
+            left = max(0, (screen_width - width) // 2)
+        else:
+            left = max(0, screen_width - width - margin)
 
         image = window.getControl(NOTIFICATION_IMAGE_ID)
         if image:
@@ -215,7 +236,8 @@ def apply_notification_layout(window: Any, text: str) -> bool:
                 color = notification_background_color()
                 image.setColorDiffuse(color)
                 log_debug(
-                    f"Notification layout: width={width}, top={top}({top_pct}%), color={color}"
+                    f"Notification layout: width={width}, left={left}(align={align}), "
+                    f"top={top}({top_pct}%), color={color}"
                 )
             except Exception as e:
                 log(f"Failed to apply notification opacity: {e}", xbmc.LOGWARNING)
@@ -234,7 +256,7 @@ def apply_notification_layout(window: Any, text: str) -> bool:
         # 诊断输出：确认 setPosition / setWidth 是否真的生效
         log_debug(
             f"Layout: text={measure_notification_text(text):.0f}px, window={width}, "
-            f"left={left}, top={top}({top_pct}%), screen_h={screen_height}"
+            f"left={left}, top={top}({top_pct}%), screen={screen_width}x{screen_height}, align={align}"
         )
         if image:
             log_debug(f"  image: pos={image.getPosition()}, size={image.getWidth()}x{image.getHeight()}")
@@ -532,10 +554,11 @@ class SettingsManager:
         )
 
     @property
-    def notification_opacity(self) -> int:
-        """通知条不透明度百分比，设置项可调（30-100）。"""
+    def notification_transparency(self) -> int:
+        """通知条透明度百分比，设置项可调（0-100）：0 完全不透明，100 全透明。"""
         return self._get_int_setting(
-            'notification_opacity', NOTIFICATION_OPACITY_DEFAULT, 30, 100
+            'notification_transparency', NOTIFICATION_TRANSPARENCY_DEFAULT,
+            NOTIFICATION_TRANSPARENCY_MIN, NOTIFICATION_TRANSPARENCY_MAX
         )
 
     @property
@@ -544,6 +567,14 @@ class SettingsManager:
         return self._get_int_setting(
             'notification_top_pct', NOTIFICATION_TOP_DEFAULT,
             NOTIFICATION_TOP_MIN, NOTIFICATION_TOP_MAX
+        )
+
+    @property
+    def notification_h_align(self) -> int:
+        """通知条水平位置：0 靠左 / 1 居中 / 2 靠右（默认），设置项可调。"""
+        return self._get_int_setting(
+            'notification_h_align', NOTIFICATION_ALIGN_DEFAULT,
+            NOTIFICATION_ALIGN_MIN, NOTIFICATION_ALIGN_MAX
         )
 
     def get_string(self, string_id: int) -> str:

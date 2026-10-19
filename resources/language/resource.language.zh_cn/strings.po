@@ -195,13 +195,13 @@ msgstr "普通提示在屏幕上停留的秒数"
 
 #: settings.xml
 msgctxt "#32041"
-msgid "Notification opacity (%)"
+msgid "Notification transparency (%)"
 msgstr "通知条透明度（%）"
 
 #: settings.xml
 msgctxt "#32042"
-msgid "30-100. Lower is more transparent; below 30 the text gets hard to read."
-msgstr "30-100，数值越小越透明；低于 30 文字会看不清"
+msgid "0-100. 0 is fully opaque, 100 is fully transparent (text only)."
+msgstr "0-100，0 为完全不透明，100 为完全透明（只剩文字）"
 
 #: settings.xml
 msgctxt "#32043"
@@ -212,3 +212,28 @@ msgstr "通知条垂直位置（%）"
 msgctxt "#32044"
 msgid "0-90. Larger moves it down; 10% stays within the top black bar of 2.39:1 movies."
 msgstr "0-90，数值越大越靠下；10% 位于 2.39:1 影片的上黑边内"
+
+#: settings.xml
+msgctxt "#32045"
+msgid "Notification horizontal position"
+msgstr "通知条水平位置"
+
+#: settings.xml
+msgctxt "#32046"
+msgid "Where the notification bar appears: left, center or right of the screen."
+msgstr "通知条在屏幕上的水平位置：靠左、居中或靠右"
+
+#: settings.xml
+msgctxt "#32047"
+msgid "Left"
+msgstr "靠左"
+
+#: settings.xml
+msgctxt "#32048"
+msgid "Center"
+msgstr "居中"
+
+#: settings.xml
+msgctxt "#32049"
+msgid "Right"
+msgstr "靠右"
