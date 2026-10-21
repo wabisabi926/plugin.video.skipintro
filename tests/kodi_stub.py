@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""为 common.py 提供最小化的 Kodi 模块替身，让纯函数可以在本地单测。"""
+"""为 skipintro 包提供最小化的 Kodi 模块替身，让纯函数可以在本地单测。"""
 import os
 import sys
 import tempfile

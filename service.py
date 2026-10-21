@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
+import sys
 import time
 import math
 import threading
@@ -8,7 +9,9 @@ from typing import Optional, Tuple
 import xbmc
 import xbmcgui
 
-from common import (
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources", "lib"))
+
+from skipintro.common import (
     ADDON_PATH, load_skip_data, log, log_debug, State,
     SETTINGS, PLAYBACK_STOP_TIMEOUT_MS, PLAYBACK_STOP_INTERVAL_MS,
     show_notification, close_current_notification, is_notification_showing,
@@ -17,14 +20,14 @@ from common import (
     MAIN_LOOP_INTERVAL,
     NOTIFICATION_DURATION_LONG
 )
-from media import (
+from skipintro.media import (
     get_current_tvshow_info, get_next_episode_from_library,
     play_episode_from_library, is_next_episode_available_in_playlist,
     get_active_video_playlist_state, get_next_file_in_directory, play_file,
     extract_media_info_from_filename, mark_current_episode_as_watched,
     get_season_episode_from_state,
 )
-from playlist import autofill_playlist_for_current_video
+from skipintro.playlist import autofill_playlist_for_current_video
 
 
 class SkipCountdownWindow(xbmcgui.WindowXMLDialog):

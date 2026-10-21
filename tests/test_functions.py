@@ -2,12 +2,12 @@
 """纯函数回归测试：文件名解析、自然排序、通知宽度估算。"""
 import unittest
 
-from common import (
+from skipintro.common import (
     _parse_season_data,
     measure_notification_text,
     notification_window_width,
 )
-from media import extract_media_info_from_filename, natural_sort_key
+from skipintro.media import extract_media_info_from_filename, natural_sort_key
 
 
 class FilenameParsingTest(unittest.TestCase):

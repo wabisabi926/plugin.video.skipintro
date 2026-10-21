@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import xbmc
 
-from common import (
+from .common import (
     AUTOFILL_DELAY_SECONDS,
     MAX_DELETE_LOWER_EPISODES_BELOW,
     MAX_PLAYLIST_ITEMS_AFTER,
@@ -16,7 +16,7 @@ from common import (
     log,
     log_debug,
 )
-from media import (
+from .media import (
     get_active_video_playlist_state,
     get_directory_playlist_files,
     get_playlist_items,

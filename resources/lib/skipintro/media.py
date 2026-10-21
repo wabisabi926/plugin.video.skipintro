@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import xbmc
 
-from common import (
+from .common import (
     CACHE_TTL_SEASON_EPISODES,
     _cache_lock,
     _caches,
