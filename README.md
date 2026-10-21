@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.4.4-blue.svg)](https://github.com/wabisabi926/plugin.video.skipintro)
+[![Version](https://img.shields.io/badge/version-1.4.6-blue.svg)](https://github.com/wabisabi926/plugin.video.skipintro)
 [![License](https://img.shields.io/badge/license-NC--3.0-green.svg)](LICENSE.txt)
 [![Platform](https://img.shields.io/badge/platform-Kodi-orange.svg)](https://kodi.tv/)
 
@@ -278,6 +278,10 @@ RunScript(plugin.video.skipintro, ?mode=delete_skip_point)
 ---
 
 ## 更新日志
+
+### v1.4.6 (2026-10)
+- 🔧 **代码结构优化**：业务模块 `common` / `media` / `playlist` 迁入 `resources/lib/skipintro` 包，根目录仅保留 `default.py` / `service.py` 作为插件入口，降低模块重名冲突风险
+- ✅ **测试增强**：新增导入链路测试，验证包内相对导入以及两个入口脚本可正常加载
 
 ### v1.4.5 (2026-10)
 - ⚙️ **新增「通知条水平位置」设置**：可选靠左 / 居中 / 靠右，与垂直位置自由组合，通知条可放到屏幕任意水平位置
