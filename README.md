@@ -151,13 +151,8 @@
 
 在 Kodi 中访问：设置 → 插件 → 我的插件 → 程序插件 → Skip Intro → 设置
 
-也可以直接点开插件本身（程序插件里的 Skip Intro），会显示一个菜单：
-
-| 菜单项 | 说明 |
-|--------|------|
-| **使用说明** | 快捷键绑定、记录规则、优先级、片尾倒计时等完整说明 |
-| **删除所有标记** | 一键清空全部标记（带确认） |
-| **设置** | 直接打开插件设置页 |
+> 注意：在「程序插件」里直接点 Skip Intro，Kodi 只会弹出插件信息窗，脚本不会自动运行。
+> 要看完整帮助，请进设置页点「使用说明」；也可以把 `mode=show_help` 绑到按键上。
 
 ### 5.1 标记与播放列表设置
 
@@ -165,6 +160,7 @@
 |--------|------|--------|
 | **自动补全播放列表** | 播放时自动补全当前季的播放列表 | 关闭 |
 | **使用 Emby 标记** | Emby for Kodi 本地库里有片头/片尾标记时自动使用 | 开启 |
+| **使用说明** | 打开完整帮助：快捷键、记录规则、优先级、片尾倒计时、通知 | - |
 
 ### 5.2 通知设置
 
@@ -260,17 +256,15 @@ addon_data/plugin.video.skipintro/skip_intro_data.json
 
 ### 7.1 直接调用插件接口
 
-可以通过 Kodi 的「运行脚本」功能直接调用：
+可以通过 Kodi 的「运行脚本」功能直接调用（参数不带 `?`）：
 
-**记录跳过点**：
-```
-RunScript(plugin.video.skipintro, ?mode=record_skip_point)
-```
-
-**删除跳过点**：
-```
-RunScript(plugin.video.skipintro, ?mode=delete_skip_point)
-```
+| 功能 | 命令 |
+|------|------|
+| 记录标记 | `RunScript(plugin.video.skipintro, mode=record_skip_point)` |
+| 删除标记 | `RunScript(plugin.video.skipintro, mode=delete_skip_point)` |
+| 打开帮助 | `RunScript(plugin.video.skipintro, mode=show_help)` |
+| 打开主菜单 | `RunScript(plugin.video.skipintro, mode=menu)` |
+| 删除所有标记 | `RunScript(plugin.video.skipintro, action=delete_all_skip_points)` |
 
 ### 7.2 自定义快捷键
 
@@ -281,13 +275,13 @@ RunScript(plugin.video.skipintro, ?mode=delete_skip_point)
     <Global>
         <keyboard>
             <!-- 全局快捷键：任意界面都可使用 -->
-            <key id="xxx">RunScript(plugin.video.skipintro, ?mode=record_skip_point)</key>
+            <key id="xxx">RunScript(plugin.video.skipintro, mode=record_skip_point)</key>
         </keyboard>
     </Global>
     <FullscreenVideo>
         <keyboard>
             <!-- 仅在视频全屏播放时生效 -->
-            <key id="xxx">RunScript(plugin.video.skipintro, ?mode=record_skip_point)</key>
+            <key id="xxx">RunScript(plugin.video.skipintro, mode=record_skip_point)</key>
         </keyboard>
     </FullscreenVideo>
 </keymap>
@@ -334,7 +328,8 @@ RunScript(plugin.video.skipintro, ?mode=delete_skip_point)
 - 🐛 修复季数据浅拷贝导致 `episodes` 嵌套字典被共享修改的问题
 - 🐛 集号无法可靠解析时不再写入，避免静默改掉整季标记
 - 🎨 文案统一为「标记」，修正英文设置描述与实际取值范围不一致的问题
-- 📖 新增插件主界面（程序插件里点开即用）：使用说明 / 删除所有标记 / 设置
+- 📖 帮助改为完整说明：快捷键、记录规则、整季与单集标记、优先级、Emby 标记、片尾倒计时、通知
+- 📖 插件主界面菜单（使用说明 / 删除所有标记 / 设置），可用 `mode=menu` 或直接运行插件打开
 
 ### v1.4.6 (2026-10)
 - 🔧 **代码结构优化**：业务模块 `common` / `media` / `playlist` 迁入 `resources/lib/skipintro` 包，根目录仅保留 `default.py` / `service.py` 作为插件入口，降低模块重名冲突风险

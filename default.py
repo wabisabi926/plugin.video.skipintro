@@ -199,6 +199,8 @@ def router(paramstring: str) -> None:
         delete_skip_point()
     elif mode == "show_help":
         show_help()
+    elif mode == "menu":
+        main_menu()
     elif action == "delete_all_skip_points":
         confirm_delete_all()
 
