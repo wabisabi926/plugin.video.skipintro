@@ -8,15 +8,17 @@
     </extension>
     <extension point="xbmc.service" library="service.py" start="login"/>
     <extension point="xbmc.addon.metadata">
-        <summary lang="en">Skip intro/outro for TV shows</summary>
-        <summary lang="zh">跳过电视剧片头/片尾</summary>
-        <description lang="en">Manually mark skip timestamps to automatically skip opening and closing credits of TV shows.
-             - Modded script.keymap add-on is suggested to map two functions:
-             "Record current time as skip point (opening/closing credits)" and "Delete skip records of current episode".
-             Map both functions to a single button: short press to record, long press to delete.
+        <summary lang="en">Skip intro and credits for TV shows</summary>
+        <summary lang="zh">跳过电视剧片头片尾</summary>
+        <description lang="en">Automatically skip the intro and closing credits of TV shows.
+             Mark the intro end point once per season; a single episode can be marked separately.
+             Markers already synced by Emby for Kodi are used automatically.
+             Bind the record/delete actions to a key in your keymap to mark timestamps during playback.
          </description>
-         <description lang="zh">手动标记跳过记录点，自动跳过电视剧片头和片尾。
-             - 建议使用按键映射魔改版插件映射"记录当前时间为跳过点（片头/片尾）"和"删除当前剧集的记录点"两个功能。建议映射到同一个按键，短按为"记录"，长按为"删除"。
+         <description lang="zh">自动跳过电视剧的片头和片尾。
+             每季标记一次即可全季生效，个别集可以单独标记。
+             Emby for Kodi 已同步的片头片尾标记会自动使用。
+             在按键映射里绑定记录/删除动作，即可在播放中标记时间点。
          </description>
         <disclaimer lang="en">For personal use only</disclaimer>
         <disclaimer lang="zh">仅供个人使用</disclaimer>

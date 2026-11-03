@@ -108,6 +108,11 @@ msgid "Cancel"
 msgstr "取消"
 
 
+#: default.py
+msgctxt "#32027"
+msgid "Skip Intro"
+msgstr "跳过片头片尾"
+
 #: settings.xml
 msgctxt "#32028"
 msgid "Enable debug logging"
@@ -255,10 +260,15 @@ msgstr "跳过片头片尾 使用说明"
 
 #: default.py
 msgctxt "#32057"
-msgid "1) Shortcuts\nCreate or edit userdata/keymaps/keyboard.xml and bind these two commands:\nRecord a marker: RunScript(plugin.video.skipintro, mode=record_skip_point)\nDelete a marker: RunScript(plugin.video.skipintro, mode=delete_skip_point)\n\n2) Recording rules\nWithin the first 20% of playback, the record key sets the intro end point.\nWithin the last 20%, it sets the credits length, counted back from the end, so episodes of different length still work.\n\n3) Season and per-episode markers\nThe first record of a season becomes the season marker. After that, recording a single episode only affects that episode.\nThe delete key only removes the current episode's marker; it never clears the season marker.\n\n4) Emby markers\nWith 'Use Emby markers' enabled, episodes already marked in Emby need no manual recording.\nPriority: per-episode marker > Emby marker > season marker."
-msgstr "1) 绑定快捷键\n在 userdata/keymaps/ 下新建或编辑 keyboard.xml，把下面两条命令绑到按键上：\n记录标记：RunScript(plugin.video.skipintro, mode=record_skip_point)\n删除标记：RunScript(plugin.video.skipintro, mode=delete_skip_point)\n\n2) 记录规则\n播放进度在前 20% 时按记录键：记录片头结束点，之后播放自动跳到这里。\n播放进度在后 20% 时按记录键：记录片尾时长（从结尾往前算），片长不同的集也能用。\n\n3) 整季标记与单集标记\n某季第一次记录会作为整季标记。之后单独记录某一集，只影响那一集。\n删除键只删本集的标记，不会清掉整季标记。\n\n4) Emby 标记\n开启「使用 Emby 标记」后，Emby 已标记片头片尾的剧集无需手动记录。\n优先级：本集标记 > Emby 标记 > 整季标记。"
+msgid "Skip Intro\n\n■ Shortcuts\nCreate or edit userdata/keymaps/keyboard.xml and bind these two commands:\nRecord a marker: RunScript(plugin.video.skipintro, mode=record_skip_point)\nDelete a marker: RunScript(plugin.video.skipintro, mode=delete_skip_point)\n\n■ Recording rules\nWithin the first 20% of playback, the record key sets the intro end point; playback then jumps there.\nWithin the last 20%, it records the length counted back from the end, so episodes of different length still work.\nThe key does nothing elsewhere.\n\n■ Season and per-episode markers\nThe first record of a season becomes the season marker and applies to every episode of that season.\nAfter that, recording a single episode only affects that episode.\nThe delete key only removes the current episode's marker, never the season marker.\n\n■ Priority\nper-episode marker > Emby marker > season marker > no skip\n\n■ Emby markers\nWith 'Use Emby markers' enabled, episodes already marked in Emby need no manual recording.\nMarkers come from the Emby for Kodi local database and require Emby to have synced them.\n\n■ Credits countdown\nAt the credits point a countdown appears (6 seconds by default, adjustable 3-10) and then the next episode plays.\nPress Back during the countdown to cancel.\n\n■ Notifications\n'Show a notification when the intro is skipped' can be turned off for binge watching.\nBar position, transparency and duration are all adjustable in settings."
+msgstr "跳过片头片尾\n\n■ 快捷键\n在 userdata/keymaps/ 下新建或编辑 keyboard.xml，绑定两条命令：\n记录标记：RunScript(plugin.video.skipintro, mode=record_skip_point)\n删除标记：RunScript(plugin.video.skipintro, mode=delete_skip_point)\n\n■ 记录规则\n播放进度在前 20% 时按记录键：把当前位置记为片头结束点，之后播放自动跳到这里。\n播放进度在后 20% 时按记录键：记录「距结尾的时长」，片长不同的集也能用。\n其他位置按键无效。\n\n■ 整季标记与单集标记\n某季第一次记录会成为整季标记，该季所有集生效。\n之后单独记录某一集，只影响那一集。\n删除键只删本集的标记，不会清掉整季标记。\n\n■ 生效优先级\n本集标记 > Emby 标记 > 整季标记 > 不跳过\n\n■ Emby 标记\n开启「使用 Emby 标记」后，Emby 已标记片头片尾的剧集无需手动记录。\n标记来自 Emby for Kodi 本地库，需要 Emby 已同步。\n\n■ 片尾倒计时\n到达片尾点后显示倒计时（默认 6 秒，可调 3-10 秒），结束自动播放下一集。\n倒计时期间按返回键可取消。\n\n■ 通知\n「跳过片头时显示提示」可关闭，连续追剧时不再每集弹窗。\n通知条的位置、透明度、停留时长都在设置里调整。"
 
 #: default.py
 msgctxt "#32058"
 msgid "Cannot identify the episode number; check the file name"
 msgstr "无法识别集号，请检查文件名"
+
+#: default.py
+msgctxt "#32059"
+msgid "Settings"
+msgstr "设置"

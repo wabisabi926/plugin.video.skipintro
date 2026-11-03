@@ -10,7 +10,7 @@ import xbmcgui
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources", "lib"))
 
 from skipintro.common import (
-    load_skip_data, save_skip_data,
+    ADDON, load_skip_data, save_skip_data,
     log, SETTINGS, delete_all_skip_points,
     show_notification, wait_for_notifications,
     set_skip_point, clear_skip_point, get_skip_point, prune_skip_record,
@@ -148,12 +148,48 @@ def show_help() -> None:
     )
 
 
+def confirm_delete_all() -> None:
+    confirmed = xbmcgui.Dialog().yesno(
+        "",
+        SETTINGS.get_string(32034),
+        yeslabel=SETTINGS.get_string(32025),
+        nolabel=SETTINGS.get_string(32026),
+    )
+    if confirmed:
+        delete_all_skip_points()
+        show_notification(SETTINGS.get_string(32035))
+
+
+def main_menu() -> None:
+    """插件主界面：从「程序插件」点进来时显示。"""
+    options = [
+        SETTINGS.get_string(32055),
+        SETTINGS.get_string(32033),
+        SETTINGS.get_string(32059),
+    ]
+    try:
+        index = xbmcgui.Dialog().select(SETTINGS.get_string(32027), options)
+    except Exception as e:
+        log(f"main_menu failed: {e}", xbmc.LOGERROR)
+        index = -1
+
+    if index == 0:
+        show_help()
+    elif index == 1:
+        confirm_delete_all()
+    elif index == 2:
+        ADDON.openSettings()
+
+
 def router(paramstring: str) -> None:
     log(f"Router called with: {paramstring}")
-    if not paramstring:
+    # plugin:// 调用会带上 "/?mode=..." 形式的路径，RunScript 则直接是 "mode=..."
+    cleaned = (paramstring or "").lstrip("/").lstrip("?")
+    if not cleaned:
+        main_menu()
         return
 
-    params = dict(urllib.parse.parse_qsl(paramstring.lstrip('?')))
+    params = dict(urllib.parse.parse_qsl(cleaned))
     mode = params.get("mode")
     action = params.get("action")
 
@@ -164,19 +200,10 @@ def router(paramstring: str) -> None:
     elif mode == "show_help":
         show_help()
     elif action == "delete_all_skip_points":
-        confirmed = xbmcgui.Dialog().yesno(
-            "",
-            SETTINGS.get_string(32034),
-            yeslabel=SETTINGS.get_string(32025),
-            nolabel=SETTINGS.get_string(32026),
-        )
-        if confirmed:
-            delete_all_skip_points()
-            show_notification(SETTINGS.get_string(32035))
+        confirm_delete_all()
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        router(sys.argv[1])
+    router(sys.argv[1] if len(sys.argv) > 1 else "")
     # 等待自定义通知窗口显示完毕，避免脚本进程退出时窗口被销毁
     wait_for_notifications()

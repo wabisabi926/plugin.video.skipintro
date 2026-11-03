@@ -108,6 +108,11 @@ msgid "Cancel"
 msgstr "Cancel"
 
 
+#: default.py
+msgctxt "#32027"
+msgid "Skip Intro"
+msgstr "Skip Intro"
+
 #: settings.xml
 msgctxt "#32028"
 msgid "Enable debug logging"
@@ -255,10 +260,15 @@ msgstr "Skip Intro - How to use"
 
 #: default.py
 msgctxt "#32057"
-msgid "1) Shortcuts\nCreate or edit userdata/keymaps/keyboard.xml and bind these two commands:\nRecord a marker: RunScript(plugin.video.skipintro, mode=record_skip_point)\nDelete a marker: RunScript(plugin.video.skipintro, mode=delete_skip_point)\n\n2) Recording rules\nWithin the first 20% of playback, the record key sets the intro end point.\nWithin the last 20%, it sets the credits length, counted back from the end, so episodes of different length still work.\n\n3) Season and per-episode markers\nThe first record of a season becomes the season marker. After that, recording a single episode only affects that episode.\nThe delete key only removes the current episode's marker; it never clears the season marker.\n\n4) Emby markers\nWith 'Use Emby markers' enabled, episodes already marked in Emby need no manual recording.\nPriority: per-episode marker > Emby marker > season marker."
-msgstr "1) Shortcuts\nCreate or edit userdata/keymaps/keyboard.xml and bind these two commands:\nRecord a marker: RunScript(plugin.video.skipintro, mode=record_skip_point)\nDelete a marker: RunScript(plugin.video.skipintro, mode=delete_skip_point)\n\n2) Recording rules\nWithin the first 20% of playback, the record key sets the intro end point.\nWithin the last 20%, it sets the credits length, counted back from the end, so episodes of different length still work.\n\n3) Season and per-episode markers\nThe first record of a season becomes the season marker. After that, recording a single episode only affects that episode.\nThe delete key only removes the current episode's marker; it never clears the season marker.\n\n4) Emby markers\nWith 'Use Emby markers' enabled, episodes already marked in Emby need no manual recording.\nPriority: per-episode marker > Emby marker > season marker."
+msgid "Skip Intro\n\n■ Shortcuts\nCreate or edit userdata/keymaps/keyboard.xml and bind these two commands:\nRecord a marker: RunScript(plugin.video.skipintro, mode=record_skip_point)\nDelete a marker: RunScript(plugin.video.skipintro, mode=delete_skip_point)\n\n■ Recording rules\nWithin the first 20% of playback, the record key sets the intro end point; playback then jumps there.\nWithin the last 20%, it records the length counted back from the end, so episodes of different length still work.\nThe key does nothing elsewhere.\n\n■ Season and per-episode markers\nThe first record of a season becomes the season marker and applies to every episode of that season.\nAfter that, recording a single episode only affects that episode.\nThe delete key only removes the current episode's marker, never the season marker.\n\n■ Priority\nper-episode marker > Emby marker > season marker > no skip\n\n■ Emby markers\nWith 'Use Emby markers' enabled, episodes already marked in Emby need no manual recording.\nMarkers come from the Emby for Kodi local database and require Emby to have synced them.\n\n■ Credits countdown\nAt the credits point a countdown appears (6 seconds by default, adjustable 3-10) and then the next episode plays.\nPress Back during the countdown to cancel.\n\n■ Notifications\n'Show a notification when the intro is skipped' can be turned off for binge watching.\nBar position, transparency and duration are all adjustable in settings."
+msgstr "Skip Intro\n\n■ Shortcuts\nCreate or edit userdata/keymaps/keyboard.xml and bind these two commands:\nRecord a marker: RunScript(plugin.video.skipintro, mode=record_skip_point)\nDelete a marker: RunScript(plugin.video.skipintro, mode=delete_skip_point)\n\n■ Recording rules\nWithin the first 20% of playback, the record key sets the intro end point; playback then jumps there.\nWithin the last 20%, it records the length counted back from the end, so episodes of different length still work.\nThe key does nothing elsewhere.\n\n■ Season and per-episode markers\nThe first record of a season becomes the season marker and applies to every episode of that season.\nAfter that, recording a single episode only affects that episode.\nThe delete key only removes the current episode's marker, never the season marker.\n\n■ Priority\nper-episode marker > Emby marker > season marker > no skip\n\n■ Emby markers\nWith 'Use Emby markers' enabled, episodes already marked in Emby need no manual recording.\nMarkers come from the Emby for Kodi local database and require Emby to have synced them.\n\n■ Credits countdown\nAt the credits point a countdown appears (6 seconds by default, adjustable 3-10) and then the next episode plays.\nPress Back during the countdown to cancel.\n\n■ Notifications\n'Show a notification when the intro is skipped' can be turned off for binge watching.\nBar position, transparency and duration are all adjustable in settings."
 
 #: default.py
 msgctxt "#32058"
 msgid "Cannot identify the episode number; check the file name"
 msgstr "Cannot identify the episode number; check the file name"
+
+#: default.py
+msgctxt "#32059"
+msgid "Settings"
+msgstr "Settings"
