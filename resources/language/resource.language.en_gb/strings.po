@@ -272,3 +272,13 @@ msgstr "Cannot identify the episode number; check the file name"
 msgctxt "#32059"
 msgid "Settings"
 msgstr "Settings"
+
+#: settings.xml
+msgctxt "#32060"
+msgid "Clear all manual markers, including season and per-episode ones. This cannot be undone."
+msgstr "Clear all manual markers, including season and per-episode ones. This cannot be undone."
+
+#: settings.xml
+msgctxt "#32061"
+msgid "Open the full guide: recording rules, season and per-episode markers, priority, Emby markers, credits countdown."
+msgstr "Open the full guide: recording rules, season and per-episode markers, priority, Emby markers, credits countdown."

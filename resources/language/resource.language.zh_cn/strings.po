@@ -272,3 +272,13 @@ msgstr "无法识别集号，请检查文件名"
 msgctxt "#32059"
 msgid "Settings"
 msgstr "设置"
+
+#: settings.xml
+msgctxt "#32060"
+msgid "Clear all manual markers, including season and per-episode ones. This cannot be undone."
+msgstr "清空所有手动标记，包含整季标记与单集标记。此操作不可撤销。"
+
+#: settings.xml
+msgctxt "#32061"
+msgid "Open the full guide: recording rules, season and per-episode markers, priority, Emby markers, credits countdown."
+msgstr "打开完整说明：记录规则、整季与单集标记、生效优先级、Emby 标记、片尾倒计时。"
