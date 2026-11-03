@@ -7,6 +7,11 @@ on:
     paths:
       - addon.xml
   workflow_dispatch:
+    inputs:
+      force:
+        description: '强制重新打包并更新 Release（即使该版本标签已存在）'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -17,6 +22,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # 需要完整标签历史，用于生成版本对比链接
+          fetch-depth: 0
 
       - name: 读取 addon.xml 版本号
         id: ver
@@ -34,13 +42,14 @@ jobs:
         run: |
           if git ls-remote --tags origin "refs/tags/v${{ steps.ver.outputs.version }}" | grep -q .; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "标签 v${{ steps.ver.outputs.version }} 已存在，跳过打包"
+            echo "标签 v${{ steps.ver.outputs.version }} 已存在"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "标签 v${{ steps.ver.outputs.version }} 不存在，将新建"
           fi
 
       - name: 打包为 Kodi 插件 zip
-        if: steps.check.outputs.exists == 'false'
+        if: steps.check.outputs.exists == 'false' || inputs.force
         run: |
           set -euo pipefail
           ADDON_ID="plugin.video.skipintro"
@@ -64,11 +73,52 @@ jobs:
           echo "打包完成，内容如下："
           unzip -l "$GITHUB_WORKSPACE/$ADDON_ID-$VERSION.zip"
 
-      - name: 创建 GitHub Release
-        if: steps.check.outputs.exists == 'false'
+      - name: 提取本版本更新说明
+        id: notes
+        if: steps.check.outputs.exists == 'false' || inputs.force
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version }}"
+
+          # 从 README 的更新日志里取 "### vX.Y.Z" 到下一个 "### " 之间的内容
+          NOTES=$(awk -v ver="### v$VERSION" '
+            index($0, ver) == 1 { flag = 1; next }
+            flag && /^### / { exit }
+            flag { lines[++n] = $0 }
+            END {
+              while (n > 0 && lines[n] ~ /^[[:space:]]*$/) n--
+              for (i = 1; i <= n; i++) print lines[i]
+            }
+          ' README.md)
+
+          if [ -z "$NOTES" ]; then
+            NOTES="- 本次发布未在 README 中记录更新说明。"
+          fi
+
+          PREV=$(git tag --sort=-v:refname | grep -v "^v${VERSION}$" | head -n1 || true)
+          echo "上一版本标签：${PREV:-（无）}"
+
+          {
+            echo "body<<__CHANGELOG_EOF__"
+            echo "## 更新内容"
+            echo
+            echo "$NOTES"
+            echo
+            echo "## 安装"
+            echo
+            echo "下载下方 \`plugin.video.skipintro-${VERSION}.zip\`，在 Kodi 中通过「设置 → 插件 → 从 zip 文件安装」安装或升级。"
+            echo
+            if [ -n "$PREV" ]; then
+              echo "**完整变更**：https://github.com/${{ github.repository }}/compare/${PREV}...v${VERSION}"
+            fi
+            echo "__CHANGELOG_EOF__"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: 创建或更新 GitHub Release
+        if: steps.check.outputs.exists == 'false' || inputs.force
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.ver.outputs.version }}
           name: v${{ steps.ver.outputs.version }}
+          body: ${{ steps.notes.outputs.body }}
           files: plugin.video.skipintro-${{ steps.ver.outputs.version }}.zip
-          generate_release_notes: true
