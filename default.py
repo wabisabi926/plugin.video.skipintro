@@ -12,10 +12,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "res
 from skipintro.common import (
     load_skip_data, save_skip_data,
     log, SETTINGS, delete_all_skip_points,
-    show_notification, wait_for_notifications, _parse_season_data,
+    show_notification, wait_for_notifications,
+    set_skip_point, clear_skip_point, get_skip_point, prune_skip_record,
     SKIP_THRESHOLD_INTRO, SKIP_THRESHOLD_OUTRO
 )
-from skipintro.media import get_current_tvshow_info
+from skipintro.media import (
+    get_current_tvshow_info, get_active_video_playlist_state,
+    get_season_episode_from_state, get_current_episode_number,
+)
 
 
 def get_current_playback_time() -> Tuple[float, float]:
@@ -49,43 +53,46 @@ def record_skip_point() -> None:
         return
 
     percentage = (current_time / total_time) * 100
+    state = get_active_video_playlist_state()
+    season_num, episode_num = get_season_episode_from_state(source_type, state, season)
+    # 集号不可靠时退回季级记录，避免把某一集的记录点错写到第 1 集
+    episode = get_current_episode_number(source_type, season, state)
+
     data = load_skip_data()
 
-    if tvshow_id not in data:
-        data[tvshow_id] = {"title": show_title, "seasons": {}}
-    elif "time" in data[tvshow_id]:
-        old_time = data[tvshow_id]["time"]
-        data[tvshow_id] = {"title": show_title, "seasons": {season: {"intro": old_time}}}
-
-    if "seasons" not in data[tvshow_id]:
-        data[tvshow_id]["seasons"] = {}
-
-    data[tvshow_id]["title"] = show_title
-
-    raw_season = data[tvshow_id]["seasons"].get(season)
-    season_data = _parse_season_data(raw_season)
+    record = data.get(tvshow_id)
+    if not isinstance(record, dict) or not isinstance(record.get("seasons"), dict):
+        # 兼容旧格式：整剧只有一个 time 值
+        legacy_time = record.get("time") if isinstance(record, dict) else None
+        record = {"title": show_title, "seasons": {}}
+        if legacy_time:
+            record["seasons"][season] = {"intro": legacy_time}
+        data[tvshow_id] = record
+    record["title"] = show_title
 
     if percentage < SKIP_THRESHOLD_INTRO:
-        season_data["intro"] = current_time
+        layer = set_skip_point(record, season, episode, "intro", current_time)
         m, s = divmod(int(current_time), 60)
         msg = SETTINGS.get_string(32005) % (m, s)
     elif percentage > SKIP_THRESHOLD_OUTRO:
         outro_duration = total_time - current_time
-        season_data["outro"] = outro_duration
+        layer = set_skip_point(record, season, episode, "outro", outro_duration)
         m, s = divmod(int(outro_duration), 60)
         msg = SETTINGS.get_string(32006) % (m, s)
     else:
         show_notification(SETTINGS.get_string(32007))
         return
 
-    data[tvshow_id]["seasons"][season] = season_data
     save_skip_data(data, immediate=True)
 
     xbmcgui.Window(10000).setProperty("MFG.Reload", "true")
 
-    full_msg = SETTINGS.get_string(32008) % (msg, season)
+    full_msg = SETTINGS.get_string(32008) % (msg, season_num, episode_num)
     show_notification(full_msg)
-    log(f"Recorded skip point for {show_title} Season {season}: {season_data}")
+    log(
+        f"Recorded skip point for {show_title} S{season_num}E{episode_num}: "
+        f"season={season} episode_key={episode} layer={layer}"
+    )
 
 
 def delete_skip_point() -> None:
@@ -99,43 +106,41 @@ def delete_skip_point() -> None:
         return
 
     percentage = (current_time / total_time) * 100
-    data = load_skip_data()
-
-    if tvshow_id not in data or "seasons" not in data[tvshow_id] or season not in data[tvshow_id]["seasons"]:
-        show_notification(SETTINGS.get_string(32010))
-        return
-
-    raw_season = data[tvshow_id]["seasons"][season]
-    season_data = _parse_season_data(raw_season)
-
     if percentage < SKIP_THRESHOLD_INTRO:
-        if "intro" in season_data:
-            del season_data["intro"]
-            msg = SETTINGS.get_string(32011)
-        else:
-            msg = SETTINGS.get_string(32012)
+        key, deleted_msg, missing_msg = "intro", 32011, 32012
     elif percentage > SKIP_THRESHOLD_OUTRO:
-        if "outro" in season_data:
-            del season_data["outro"]
-            msg = SETTINGS.get_string(32013)
-        else:
-            msg = SETTINGS.get_string(32014)
+        key, deleted_msg, missing_msg = "outro", 32013, 32014
     else:
         show_notification(SETTINGS.get_string(32015))
         return
 
-    if not season_data:
-        del data[tvshow_id]["seasons"][season]
-    else:
-        data[tvshow_id]["seasons"][season] = season_data
+    state = get_active_video_playlist_state()
+    episode = get_current_episode_number(source_type, season, state)
 
-    if not data[tvshow_id]["seasons"]:
-        del data[tvshow_id]
+    data = load_skip_data()
+    record = data.get(tvshow_id)
+    if not isinstance(record, dict):
+        show_notification(SETTINGS.get_string(32010))
+        return
 
-    save_skip_data(data, immediate=True)
+    # 只删本集覆盖，季基准不在这里动，避免一个快捷键静默清掉全季
+    if clear_skip_point(record, season, episode, key) == "episode":
+        prune_skip_record(data, tvshow_id)
+        save_skip_data(data, immediate=True)
+        xbmcgui.Window(10000).setProperty("MFG.Reload", "true")
+        show_notification(SETTINGS.get_string(deleted_msg))
+        log(f"Cleared {key} override for {show_title} season={season} episode_key={episode}")
+        return
 
-    xbmcgui.Window(10000).setProperty("MFG.Reload", "true")
-    show_notification(msg)
+    season_value, _ = get_skip_point(record, season, 0, key, 0)
+    show_notification(SETTINGS.get_string(32054 if season_value > 0 else missing_msg))
+
+
+def show_help() -> None:
+    xbmcgui.Dialog().textviewer(
+        SETTINGS.get_string(32056),
+        SETTINGS.get_string(32057),
+    )
 
 
 def router(paramstring: str) -> None:
@@ -151,6 +156,8 @@ def router(paramstring: str) -> None:
         record_skip_point()
     elif mode == "delete_skip_point":
         delete_skip_point()
+    elif mode == "show_help":
+        show_help()
     elif action == "delete_all_skip_points":
         confirmed = xbmcgui.Dialog().yesno(
             "",

@@ -481,6 +481,31 @@ def get_season_episode_from_state(source_type: str, state: Any, season: Any) -> 
         return 1, 1
 
 
+def get_current_episode_number(source_type: str, season: Any = None,
+                              state: Any = None) -> int:
+    """当前集号；无法可靠确定时返回 0。
+
+    与 get_season_episode_from_state 的区别：那边拿不到集号会兜底成 1（用于提示文案），
+    这里返回 0，让调用方退回季级记录，避免把某一集的记录点错写到第 1 集。
+    """
+    if state is None:
+        state = get_active_video_playlist_state()
+    try:
+        if source_type == 'directory' and isinstance(state, dict):
+            current_file = state.get("file", "")
+            if current_file:
+                _, parsed_episode, parsed = extract_media_info_from_filename(current_file)
+                if parsed and parsed_episode > 0:
+                    return parsed_episode
+        if isinstance(state, dict):
+            episode = state.get("episode")
+            if episode is not None and int(episode) > 0:
+                return int(episode)
+    except (ValueError, TypeError):
+        pass
+    return 0
+
+
 def get_directory_playlist_files(current_file: str) -> List[str]:
     try:
         if not current_file:

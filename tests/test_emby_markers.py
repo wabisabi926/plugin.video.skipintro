@@ -1,17 +1,12 @@
 # -*- coding: utf-8 -*-
-"""Emby 本地记录点查询与手动/自动优先级测试：只依赖临时 SQLite。"""
+"""Emby 本地记录点查询测试：只依赖临时 SQLite。"""
 
 import os
 import sqlite3
 import tempfile
 import unittest
 
-from skipintro.emby_markers import (
-    find_markers,
-    intro_skip_target,
-    outro_trigger_time,
-    server_id_from_db,
-)
+from skipintro.emby_markers import find_markers, server_id_from_db
 
 
 def make_db(rows, episodes=()):
@@ -72,28 +67,6 @@ class EmbyMarkersTest(unittest.TestCase):
 
     def test_server_id_from_db_name(self):
         self.assertEqual(server_id_from_db("emby_abc123.db"), "abc123")
-
-
-class ResolveTest(unittest.TestCase):
-
-    markers = {"intro_end": 100, "credits_start": 2380}
-
-    def test_manual_intro_wins(self):
-        self.assertEqual(intro_skip_target(95, self.markers), 95)
-
-    def test_emby_intro_fallback(self):
-        self.assertEqual(intro_skip_target(0, self.markers), 100)
-        self.assertEqual(intro_skip_target(None, None), 0)
-
-    def test_manual_outro_wins(self):
-        self.assertEqual(outro_trigger_time(30, 2400, self.markers), 2370)
-
-    def test_emby_credits_fallback(self):
-        self.assertEqual(outro_trigger_time(0, 2400, self.markers), 2380)
-        self.assertEqual(outro_trigger_time(None, 0, None), 0)
-
-    def test_invalid_manual_outro_falls_back(self):
-        self.assertEqual(outro_trigger_time(9999, 2400, self.markers), 2380)
 
 
 if __name__ == "__main__":

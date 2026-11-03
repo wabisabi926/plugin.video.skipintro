@@ -55,8 +55,8 @@ msgstr "Please call within first or last 20% of the episode"
 
 #: default.py
 msgctxt "#32008"
-msgid "%s (Season %s)"
-msgstr "%s (Season %s)"
+msgid "%s (S%sE%s)"
+msgstr "%s (S%sE%s)"
 
 #: default.py
 msgctxt "#32009"
@@ -247,3 +247,33 @@ msgstr "Use Emby intro/credits points"
 msgctxt "#32051"
 msgid "Manual records still win; when a season has none, read IntroEnd/CreditsStart from the Emby for Kodi local database. Requires Emby to have synced those points."
 msgstr "Manual records still win; when a season has none, read IntroEnd/CreditsStart from the Emby for Kodi local database. Requires Emby to have synced those points."
+
+#: settings.xml
+msgctxt "#32052"
+msgid "Show a notification when the intro is skipped"
+msgstr "Show a notification when the intro is skipped"
+
+#: settings.xml
+msgctxt "#32053"
+msgid "Turn this off to skip intros silently, without a notification on every episode."
+msgstr "Turn this off to skip intros silently, without a notification on every episode."
+
+#: default.py
+msgctxt "#32054"
+msgid "No per-episode record; the season default is still in use"
+msgstr "No per-episode record; the season default is still in use"
+
+#: settings.xml
+msgctxt "#32055"
+msgid "How to use"
+msgstr "How to use"
+
+#: default.py
+msgctxt "#32056"
+msgid "Skip Intro - How to use"
+msgstr "Skip Intro - How to use"
+
+#: default.py
+msgctxt "#32057"
+msgid "1) Shortcuts\nCreate or edit userdata/keymaps/keyboard.xml and bind these two commands:\nRecord a skip point: RunScript(plugin.video.skipintro, mode=record_skip_point)\nDelete a skip point: RunScript(plugin.video.skipintro, mode=delete_skip_point)\n\n2) Recording rules\nWithin the first 20% of playback, the record key sets the intro end point.\nWithin the last 20%, it sets the outro length, counted back from the end, so episodes of different length still work.\n\n3) Season default and per-episode override\nThe first record of a season becomes the default for the whole season. After that, recording a single episode only affects that episode.\nThe delete key only removes the current episode's record; it never clears the season default.\n\n4) Emby points\nWith 'Use Emby intro/credits points' enabled, episodes already marked in Emby need no manual recording."
+msgstr "1) Shortcuts\nCreate or edit userdata/keymaps/keyboard.xml and bind these two commands:\nRecord a skip point: RunScript(plugin.video.skipintro, mode=record_skip_point)\nDelete a skip point: RunScript(plugin.video.skipintro, mode=delete_skip_point)\n\n2) Recording rules\nWithin the first 20% of playback, the record key sets the intro end point.\nWithin the last 20%, it sets the outro length, counted back from the end, so episodes of different length still work.\n\n3) Season default and per-episode override\nThe first record of a season becomes the default for the whole season. After that, recording a single episode only affects that episode.\nThe delete key only removes the current episode's record; it never clears the season default.\n\n4) Emby points\nWith 'Use Emby intro/credits points' enabled, episodes already marked in Emby need no manual recording."

@@ -11,7 +11,8 @@ Emby 插件把记录点写在 `Database/emby_<ServerId>.db` 的 `MediaSources` �
   3. 播放路径与 `MediaSources.Path` 完全一致；
   4. 文件名（`MediaSources.Name` / Path 的 basename）匹配。
 
-手动记录与 Emby 的优先级：手动记录优先，缺失时再用 Emby。
+本模块只负责「取出 Emby 侧的原始记录点」，与本地手动记录、季基准的优先级
+统一由 `common.get_skip_point()` / `common.get_outro_trigger()` 决定。
 """
 
 import glob
@@ -155,37 +156,3 @@ def find_markers(playing_file: str = "", kodi_id: int = 0,
         finally:
             con.close()
     return None
-
-
-def intro_skip_target(manual_seconds: Any, markers: Optional[Dict[str, Any]]) -> int:
-    """片头跳到哪里：手动记录优先，没有手动记录时用 Emby 的 IntroEnd。"""
-    try:
-        manual = int(float(manual_seconds or 0))
-    except (TypeError, ValueError):
-        manual = 0
-    if manual > 0:
-        return manual
-    try:
-        return max(0, int((markers or {}).get("intro_end") or 0))
-    except (TypeError, ValueError):
-        return 0
-
-
-def outro_trigger_time(manual_outro_seconds: Any, total_seconds: Any,
-                       markers: Optional[Dict[str, Any]]) -> float:
-    """片尾倒计时从哪开始：手动记录（从结尾倒推）优先，否则用 Emby 的 CreditsStart。
-
-    返回 0 表示没有可用的片尾点。
-    """
-    try:
-        manual = float(manual_outro_seconds or 0)
-        total = float(total_seconds or 0)
-    except (TypeError, ValueError):
-        manual = total = 0.0
-    if manual > 0 and total > manual:
-        return total - manual
-    try:
-        credits = float((markers or {}).get("credits_start") or 0)
-    except (TypeError, ValueError):
-        credits = 0.0
-    return max(0.0, credits)

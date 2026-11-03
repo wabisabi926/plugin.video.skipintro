@@ -18,17 +18,18 @@ from skipintro.common import (
     apply_notification_layout, NOTIFICATION_LABEL_ID,
     OUTRO_RESET_BUFFER, notification_max_wait,
     MAIN_LOOP_INTERVAL,
-    NOTIFICATION_DURATION_LONG
+    NOTIFICATION_DURATION_LONG,
+    get_skip_point, get_outro_trigger,
 )
 from skipintro.media import (
     get_current_tvshow_info, get_next_episode_from_library,
     play_episode_from_library, is_next_episode_available_in_playlist,
     get_active_video_playlist_state, get_next_file_in_directory, play_file,
     extract_media_info_from_filename, mark_current_episode_as_watched,
-    get_season_episode_from_state,
+    get_season_episode_from_state, get_current_episode_number,
 )
 from skipintro.playlist import autofill_playlist_for_current_video
-from skipintro.emby_markers import find_markers, intro_skip_target, outro_trigger_time
+from skipintro.emby_markers import find_markers
 
 
 class SkipCountdownWindow(xbmcgui.WindowXMLDialog):
@@ -209,13 +210,8 @@ class PlayerMonitor(xbmc.Player):
         if not tvshow_id:
             return
 
-        manual_outro = 0
         data = load_skip_data(force_reload=True)
         record = data.get(tvshow_id) or {}
-        seasons = record.get("seasons") or {}
-        s_data = seasons.get(season)
-        if isinstance(s_data, dict):
-            manual_outro = s_data.get("outro") or 0
 
         try:
             total_time = self.getTotalTime()
@@ -225,8 +221,16 @@ class PlayerMonitor(xbmc.Player):
         if total_time <= 0:
             return
 
-        # 手动记录优先；该季没有手动片尾时用 Emby 的 CreditsStart
-        trigger_time = outro_trigger_time(manual_outro, total_time, self.emby_markers)
+        state = get_active_video_playlist_state()
+        _, episode_num = get_season_episode_from_state(source_type, state, season)
+        lookup_episode = get_current_episode_number(source_type, season, state)
+        emby_credits = (self.emby_markers or {}).get("credits_start") or 0
+
+        # 优先级：本集覆盖 > Emby 记录点 > 季基准
+        trigger_time, source = get_outro_trigger(
+            record, season, lookup_episode, total_time, emby_credits
+        )
+        log_debug(f"Outro trigger {trigger_time} (source={source}) for S{season}E{episode_num}")
         if trigger_time > 0:
             if self.current_outro_time != trigger_time:
                 self.current_outro_time = trigger_time
@@ -249,17 +253,15 @@ class PlayerMonitor(xbmc.Player):
         state = get_active_video_playlist_state()
         data = load_skip_data()
         record = data.get(tvshow_id) or {}
-        manual_intro = 0
+        season_num, episode_num = get_season_episode_from_state(source_type, state, season)
+        lookup_episode = get_current_episode_number(source_type, season, state)
+        emby_intro_end = (self.emby_markers or {}).get("intro_end") or 0
 
-        seasons = record.get("seasons") or {}
-        if season in seasons:
-            val = seasons[season]
-            manual_intro = val.get("intro", 0) if isinstance(val, dict) else val
-        elif "time" in record:
-            manual_intro = record["time"]
-
-        # 手动记录优先；没有手动片头时用 Emby 的 IntroEnd
-        skip_time = intro_skip_target(manual_intro, self.emby_markers)
+        # 优先级：本集覆盖 > Emby 记录点 > 季基准
+        skip_time, source = get_skip_point(
+            record, season, lookup_episode, "intro", emby_intro_end
+        )
+        log_debug(f"Intro skip target {skip_time} (source={source}) for S{season_num}E{episode_num}")
         if skip_time <= 0:
             return
         try:
@@ -268,9 +270,9 @@ class PlayerMonitor(xbmc.Player):
                 log_debug(f"Auto skipping intro for {show_title} S{season}. Current: {current_time}, Target: {skip_time}")
                 self.seekTime(skip_time)
 
-                season_num, episode_num = get_season_episode_from_state(source_type, state, season)
-                notification_text = SETTINGS.get_string(32000) % (season_num, episode_num)
-                show_notification(notification_text)
+                if SETTINGS.notify_intro_skip:
+                    notification_text = SETTINGS.get_string(32000) % (season_num, episode_num)
+                    show_notification(notification_text)
         except Exception as e:
             log(f"Error during skip: {e}", xbmc.LOGERROR)
 

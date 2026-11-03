@@ -7,6 +7,7 @@ import os
 import re
 import time
 import math
+import copy
 import threading
 import xbmcaddon
 import shutil
@@ -461,11 +462,183 @@ def wait_for_notifications(timeout_ms: Optional[int] = None) -> None:
 
 
 def _parse_season_data(raw: Any) -> Dict[str, Any]:
+    """季数据副本。深拷贝，避免调用方改到缓存里的 episodes 嵌套字典。"""
     if isinstance(raw, (int, float)):
         return {"intro": raw}
     if isinstance(raw, dict):
-        return raw.copy()
+        return copy.deepcopy(raw)
     return {}
+
+
+def _to_seconds(value: Any) -> float:
+    try:
+        return max(0.0, float(value or 0))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _find_season(seasons: Any, season: Any, create: bool = False) -> Optional[Dict[str, Any]]:
+    """定位某季的实时字典；旧格式（季值直接是数字）会原地升级成字典。"""
+    if not isinstance(seasons, dict):
+        return None
+    for key in (season, str(season)):
+        if key in seasons:
+            value = seasons[key]
+            if isinstance(value, dict):
+                return value
+            if isinstance(value, (int, float)):
+                upgraded: Dict[str, Any] = {"intro": value}
+                seasons[key] = upgraded
+                return upgraded
+            return None
+    if create:
+        created: Dict[str, Any] = {}
+        seasons[str(season)] = created
+        return created
+    return None
+
+
+def _season_copy(record: Any, season: Any) -> Dict[str, Any]:
+    if not isinstance(record, dict):
+        return {}
+    return _parse_season_data(_find_season(record.get("seasons"), season))
+
+
+def get_skip_point(record: Any, season: Any, episode: Any, key: str,
+                   auto_value: Any = 0) -> Tuple[float, str]:
+    """取片头/片尾记录点，返回 (秒, 来源)。
+
+    优先级：本集覆盖 > 自动记录点（Emby）> 季基准 > 无。
+    来源取值：episode / auto / season / legacy / none。
+    本集覆盖里显式写 0 表示「本集不跳」，会挡住自动记录点与季基准。
+    """
+    season_data = _season_copy(record, season)
+    if not season_data and key == "intro" and isinstance(record, dict) and "time" in record:
+        return _to_seconds(record.get("time")), "legacy"
+
+    episodes = season_data.get("episodes")
+    if episode and isinstance(episodes, dict):
+        ep_data = episodes.get(str(episode))
+        if isinstance(ep_data, dict) and key in ep_data:
+            return _to_seconds(ep_data.get(key)), "episode"
+
+    auto = _to_seconds(auto_value)
+    if auto > 0:
+        return auto, "auto"
+
+    if key in season_data:
+        return _to_seconds(season_data.get(key)), "season"
+    return 0.0, "none"
+
+
+def get_outro_trigger(record: Any, season: Any, episode: Any, total_time: Any,
+                      auto_seconds: Any = 0) -> Tuple[float, str]:
+    """片尾触发点（绝对秒）。本地存「距结尾秒数」，Emby 存绝对秒，这里统一换算。
+
+    优先级与 get_skip_point 一致；总时长不足以容纳本地值时视为无效。
+    """
+    total = _to_seconds(total_time)
+    season_data = _season_copy(record, season)
+
+    episodes = season_data.get("episodes")
+    if episode and isinstance(episodes, dict):
+        ep_data = episodes.get(str(episode))
+        if isinstance(ep_data, dict) and "outro" in ep_data:
+            value = _to_seconds(ep_data.get("outro"))
+            return (total - value if value > 0 and total > value else 0.0), "episode"
+
+    auto = _to_seconds(auto_seconds)
+    if auto > 0:
+        return auto, "auto"
+
+    value = _to_seconds(season_data.get("outro"))
+    if value > 0 and total > value:
+        return total - value, "season"
+    return 0.0, "none"
+
+
+def set_skip_point(record: Dict[str, Any], season: Any, episode: Any, key: str,
+                   value: Any) -> str:
+    """写入记录点，返回写入层级 season / episode。
+
+    该字段还没有季基准时建立基准（全季生效），已有基准则只写本集覆盖。
+    """
+    seconds = _to_seconds(value)
+    seasons = record.get("seasons")
+    if not isinstance(seasons, dict):
+        seasons = {}
+        record["seasons"] = seasons
+
+    season_data = _find_season(seasons, season, create=True)
+    if season_data is None:
+        return "none"
+
+    if not _to_seconds(season_data.get(key)) or not episode:
+        season_data[key] = seconds
+        return "season"
+
+    episodes = season_data.get("episodes")
+    if not isinstance(episodes, dict):
+        episodes = {}
+        season_data["episodes"] = episodes
+
+    ep_data = episodes.get(str(episode))
+    if not isinstance(ep_data, dict):
+        ep_data = {}
+        episodes[str(episode)] = ep_data
+    ep_data[key] = seconds
+    return "episode"
+
+
+def clear_skip_point(record: Any, season: Any, episode: Any, key: str) -> str:
+    """删除本集覆盖，返回 episode / none。不会动季基准。"""
+    if not isinstance(record, dict):
+        return "none"
+    season_data = _find_season(record.get("seasons"), season)
+    if season_data is None:
+        return "none"
+
+    episodes = season_data.get("episodes")
+    ep_data = episodes.get(str(episode)) if episode and isinstance(episodes, dict) else None
+    if isinstance(ep_data, dict) and key in ep_data:
+        del ep_data[key]
+        if not ep_data:
+            del episodes[str(episode)]
+        if not episodes:
+            del season_data["episodes"]
+        return "episode"
+    return "none"
+
+
+def prune_skip_record(data: Dict[str, Any], tvshow_id: str) -> None:
+    """清掉空的季/剧条目，保持 json 干净。"""
+    record = data.get(tvshow_id)
+    if not isinstance(record, dict):
+        return
+    seasons = record.get("seasons")
+    if not isinstance(seasons, dict):
+        return
+
+    for season_key in list(seasons.keys()):
+        season_data = seasons[season_key]
+        if not isinstance(season_data, dict):
+            if not season_data:
+                del seasons[season_key]
+            continue
+
+        episodes = season_data.get("episodes")
+        if isinstance(episodes, dict):
+            for episode_key in list(episodes.keys()):
+                if not episodes[episode_key]:
+                    del episodes[episode_key]
+            if not episodes:
+                del season_data["episodes"]
+
+        if not any(key in season_data for key in ("intro", "outro", "episodes")):
+            del seasons[season_key]
+
+    if not seasons:
+        del data[tvshow_id]
 
 
 def catch_exceptions(default_return: Any = None, log_prefix: str = "[SkipIntro]") -> Callable:
@@ -513,6 +686,12 @@ class SettingsManager:
     def use_emby_markers(self) -> bool:
         """是否读取 Emby 本地记录点；默认开，手动记录仍然优先。"""
         value: Optional[str] = self._get_setting('use_emby_markers')
+        return value != 'false'
+
+    @property
+    def notify_intro_skip(self) -> bool:
+        """跳过片头时是否弹提示；默认开。"""
+        value: Optional[str] = self._get_setting('notify_intro_skip')
         return value != 'false'
 
     @property
