@@ -1,20 +1,109 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<settings>
-    <category label="32030">
-        <setting id="autofill_playlist_on_play" type="bool" label="32017" description="32018" default="false"/>
-        <setting id="use_emby_markers" type="bool" label="32050" description="32051" default="true"/>
-        <setting id="delete_all_skip_points" type="action" label="32033" description="32060" action="RunScript(plugin.video.skipintro, action=delete_all_skip_points)"/>
-        <setting id="show_help" type="action" label="32055" description="32061" action="RunScript(plugin.video.skipintro, mode=show_help)"/>
-    </category>
-    <category label="32036">
-        <setting id="notify_intro_skip" type="bool" label="32052" description="32053" default="true"/>
-        <setting id="countdown_seconds" type="slider" label="32037" description="32038" default="6" range="3,1,10"/>
-        <setting id="notification_seconds" type="slider" label="32039" description="32040" default="3" range="3,1,10"/>
-        <setting id="notification_transparency" type="slider" label="32041" description="32042" default="20" range="0,5,100"/>
-        <setting id="notification_top_pct" type="slider" label="32043" description="32044" default="10" range="0,5,90"/>
-        <setting id="notification_h_align" type="enum" label="32045" description="32046" lvalues="32047|32048|32049" default="2"/>
-    </category>
-    <category label="32031">
-        <setting id="debug_mode" type="bool" label="32028" description="32029" default="false"/>
-    </category>
+<settings version="1">
+    <section id="plugin.video.skipintro">
+        <category id="general" label="32030">
+            <group id="1">
+                <setting id="autofill_playlist_on_play" type="boolean" label="32017" help="32018">
+                    <level>0</level>
+                    <default>false</default>
+                    <control type="toggle"/>
+                </setting>
+                <setting id="use_emby_markers" type="boolean" label="32050" help="32051">
+                    <level>0</level>
+                    <default>true</default>
+                    <control type="toggle"/>
+                </setting>
+                <setting id="delete_all_skip_points" type="action" label="32033" help="32060">
+                    <level>0</level>
+                    <data>RunScript(plugin.video.skipintro, action=delete_all_skip_points)</data>
+                    <control type="button" format="action"/>
+                </setting>
+                <setting id="show_help" type="action" label="32055" help="32061">
+                    <level>0</level>
+                    <data>RunScript(plugin.video.skipintro, mode=show_help)</data>
+                    <control type="button" format="action"/>
+                </setting>
+            </group>
+        </category>
+
+        <category id="notifications" label="32036">
+            <group id="1">
+                <setting id="notify_intro_skip" type="boolean" label="32052" help="32053">
+                    <level>0</level>
+                    <default>true</default>
+                    <control type="toggle"/>
+                </setting>
+                <setting id="countdown_seconds" type="integer" label="32037" help="32038">
+                    <level>0</level>
+                    <default>6</default>
+                    <constraints>
+                        <minimum>3</minimum>
+                        <step>1</step>
+                        <maximum>10</maximum>
+                    </constraints>
+                    <control type="slider" format="integer">
+                        <popup>false</popup>
+                    </control>
+                </setting>
+                <setting id="notification_seconds" type="integer" label="32039" help="32040">
+                    <level>0</level>
+                    <default>3</default>
+                    <constraints>
+                        <minimum>3</minimum>
+                        <step>1</step>
+                        <maximum>10</maximum>
+                    </constraints>
+                    <control type="slider" format="integer">
+                        <popup>false</popup>
+                    </control>
+                </setting>
+                <setting id="notification_transparency" type="integer" label="32041" help="32042">
+                    <level>0</level>
+                    <default>20</default>
+                    <constraints>
+                        <minimum>0</minimum>
+                        <step>5</step>
+                        <maximum>100</maximum>
+                    </constraints>
+                    <control type="slider" format="integer">
+                        <popup>false</popup>
+                    </control>
+                </setting>
+                <setting id="notification_top_pct" type="integer" label="32043" help="32044">
+                    <level>0</level>
+                    <default>10</default>
+                    <constraints>
+                        <minimum>0</minimum>
+                        <step>5</step>
+                        <maximum>90</maximum>
+                    </constraints>
+                    <control type="slider" format="integer">
+                        <popup>false</popup>
+                    </control>
+                </setting>
+                <setting id="notification_h_align" type="integer" label="32045" help="32046">
+                    <level>0</level>
+                    <default>2</default>
+                    <constraints>
+                        <options>
+                            <option label="32047">0</option>
+                            <option label="32048">1</option>
+                            <option label="32049">2</option>
+                        </options>
+                    </constraints>
+                    <control type="spinner" format="integer"/>
+                </setting>
+            </group>
+        </category>
+
+        <category id="logging" label="32031">
+            <group id="1">
+                <setting id="debug_mode" type="boolean" label="32028" help="32029">
+                    <level>0</level>
+                    <default>false</default>
+                    <control type="toggle"/>
+                </setting>
+            </group>
+        </category>
+    </section>
 </settings>
