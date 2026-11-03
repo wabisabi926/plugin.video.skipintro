@@ -51,13 +51,18 @@ class SetPointTest(unittest.TestCase):
         self.assertEqual(record["seasons"]["1"]["intro"], 100)
         self.assertEqual(record["seasons"]["1"]["outro"], 60)
 
-    def test_unknown_episode_writes_season_default(self):
+    def test_unknown_episode_does_not_overwrite_season_marker(self):
         record = make_record()
         set_skip_point(record, "1", 1, "intro", 100)
         layer = set_skip_point(record, "1", 0, "intro", 120)
-        self.assertEqual(layer, "season")
-        self.assertEqual(record["seasons"]["1"]["intro"], 120)
+        self.assertEqual(layer, "unknown")
+        self.assertEqual(record["seasons"]["1"]["intro"], 100)
         self.assertNotIn("episodes", record["seasons"]["1"])
+
+    def test_unknown_episode_creates_season_marker_when_empty(self):
+        record = make_record()
+        self.assertEqual(set_skip_point(record, "1", 0, "intro", 120), "season")
+        self.assertEqual(record["seasons"]["1"]["intro"], 120)
 
 
 class ResolveIntroTest(unittest.TestCase):

@@ -83,6 +83,11 @@ def record_skip_point() -> None:
         show_notification(SETTINGS.get_string(32007))
         return
 
+    if layer == "unknown":
+        # 集号识别不出来又已有整季标记：宁可不写，也不静默改掉整季
+        show_notification(SETTINGS.get_string(32058))
+        return
+
     save_skip_data(data, immediate=True)
 
     xbmcgui.Window(10000).setProperty("MFG.Reload", "true")

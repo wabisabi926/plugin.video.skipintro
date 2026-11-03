@@ -559,9 +559,10 @@ def get_outro_trigger(record: Any, season: Any, episode: Any, total_time: Any,
 
 def set_skip_point(record: Dict[str, Any], season: Any, episode: Any, key: str,
                    value: Any) -> str:
-    """写入记录点，返回写入层级 season / episode。
+    """写入记录点，返回写入层级 season / episode / unknown / none。
 
-    该字段还没有季基准时建立基准（全季生效），已有基准则只写本集覆盖。
+    该字段还没有整季标记时建立标记（全季生效），已有标记时只写本集标记。
+    集号无法确定时返回 unknown 且不写入，避免静默覆盖整季标记。
     """
     seconds = _to_seconds(value)
     seasons = record.get("seasons")
@@ -569,13 +570,21 @@ def set_skip_point(record: Dict[str, Any], season: Any, episode: Any, key: str,
         seasons = {}
         record["seasons"] = seasons
 
-    season_data = _find_season(seasons, season, create=True)
+    season_data = _find_season(seasons, season)
     if season_data is None:
-        return "none"
-
-    if not _to_seconds(season_data.get(key)) or not episode:
+        # 该季还没有任何标记：建立整季标记，即使集号未知也不会覆盖到别人
+        season_data = _find_season(seasons, season, create=True)
+        if season_data is None:
+            return "none"
         season_data[key] = seconds
         return "season"
+
+    if not _to_seconds(season_data.get(key)):
+        season_data[key] = seconds
+        return "season"
+
+    if not episode:
+        return "unknown"
 
     episodes = season_data.get("episodes")
     if not isinstance(episodes, dict):

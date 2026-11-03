@@ -15,13 +15,9 @@ msgstr ""
 
 #: service.py
 msgctxt "#32000"
-msgid "Intro Skipped - Now playing S%02dE%02d"
-msgstr "Intro Skipped - Now playing S%02dE%02d"
+msgid "Intro skipped S%02dE%02d"
+msgstr "Intro skipped S%02dE%02d"
 
-#: service.py
-msgctxt "#32001"
-msgid "About to finish playing"
-msgstr "About to finish playing S%02dE%02d"
 
 #: service.py
 msgctxt "#32002"
@@ -35,8 +31,8 @@ msgstr "S%02dE%02d ends in %ds - Back to cancel"
 
 #: default.py
 msgctxt "#32004"
-msgid "Skip not available for non-episodes"
-msgstr "Skip not available for non-episodes"
+msgid "Skip is only available for episodes"
+msgstr "Skip is only available for episodes"
 
 #: default.py
 msgctxt "#32005"
@@ -45,73 +41,61 @@ msgstr "Intro recorded: %02d:%02d"
 
 #: default.py
 msgctxt "#32006"
-msgid "Outro duration recorded: %02d:%02d"
-msgstr "Outro duration recorded: %02d:%02d"
+msgid "Outro length recorded: %02d:%02d"
+msgstr "Outro length recorded: %02d:%02d"
 
 #: default.py
 msgctxt "#32007"
-msgid "Please call within first or last 20% of the episode"
-msgstr "Please call within first or last 20% of the episode"
+msgid "Press this key during the intro or credits"
+msgstr "Press this key during the intro or credits"
 
 #: default.py
 msgctxt "#32008"
 msgid "%s (S%sE%s)"
 msgstr "%s (S%sE%s)"
 
-#: default.py
-msgctxt "#32009"
-msgid "Recording failed, please check logs"
-msgstr "Recording failed, please check logs"
 
 #: default.py
 msgctxt "#32010"
-msgid "No intro/outro markers"
-msgstr "No intro/outro markers"
+msgid "No intro or credits markers"
+msgstr "No intro or credits markers"
 
 #: default.py
 msgctxt "#32011"
-msgid "Intro record deleted"
-msgstr "Intro record deleted"
+msgid "Intro marker deleted"
+msgstr "Intro marker deleted"
 
 #: default.py
 msgctxt "#32012"
-msgid "No intro record"
-msgstr "No intro record"
+msgid "No intro marker"
+msgstr "No intro marker"
 
 #: default.py
 msgctxt "#32013"
-msgid "Outro record deleted"
-msgstr "Outro record deleted"
+msgid "Credits marker deleted"
+msgstr "Credits marker deleted"
 
 #: default.py
 msgctxt "#32014"
-msgid "No outro record"
-msgstr "No outro record"
+msgid "No credits marker"
+msgstr "No credits marker"
 
 #: default.py
 msgctxt "#32015"
-msgid "Delete failed!Please call within first or last 20% of the episode"
-msgstr "Delete failed - only within first/last 20%"
+msgid "Press this key during the intro or credits"
+msgstr "Press this key during the intro or credits"
 
-#: default.py
-msgctxt "#32016"
-msgid "Delete error"
-msgstr "Delete error"
 
 #: settings.xml
 msgctxt "#32017"
-msgid "Auto fill playlist on play"
-msgstr "Auto fill playlist on play"
+msgid "Auto-fill playlist on playback"
+msgstr "Auto-fill playlist on playback"
 
 #: settings.xml
 msgctxt "#32018"
-msgid "Automatically fill the playlist with episodes from the same season when playing a TV show episode."
-msgstr "Automatically fill the playlist with episodes from the same season when playing a TV show episode."
+msgid "Automatically add episodes of the same season to the playlist during playback."
+msgstr "Automatically add episodes of the same season to the playlist during playback."
 
-#: settings.xml
-msgctxt "#32019"
-msgid "Playlist Settings"
-msgstr "Playlist Settings"
 
 #: default.py
 msgctxt "#32025"
@@ -123,10 +107,6 @@ msgctxt "#32026"
 msgid "Cancel"
 msgstr "Cancel"
 
-#: default.py, service.py
-msgctxt "#32027"
-msgid "Skip Intro"
-msgstr "Skip Intro"
 
 #: settings.xml
 msgctxt "#32028"
@@ -150,23 +130,23 @@ msgstr "Logging"
 
 #: service.py
 msgctxt "#32032"
-msgid "No more episodes available"
-msgstr "No more episodes available"
+msgid "No more episodes"
+msgstr "No more episodes"
 
 #: settings.xml
 msgctxt "#32033"
-msgid "Delete all skip points"
-msgstr "Delete all skip points"
+msgid "Delete all markers"
+msgstr "Delete all markers"
 
 #: default.py
 msgctxt "#32034"
-msgid "Are you sure you want to delete all skip points? This action cannot be undone."
-msgstr "Are you sure you want to delete all skip points? This action cannot be undone."
+msgid "Delete all markers? This cannot be undone."
+msgstr "Delete all markers? This cannot be undone."
 
 #: default.py
 msgctxt "#32035"
-msgid "All skip points deleted"
-msgstr "All skip points deleted"
+msgid "All markers deleted"
+msgstr "All markers deleted"
 
 #: settings.xml
 msgctxt "#32036"
@@ -175,28 +155,28 @@ msgstr "Notifications"
 
 #: settings.xml
 msgctxt "#32037"
-msgid "Countdown duration (3-10 seconds)"
-msgstr "Countdown duration (3-10 seconds)"
+msgid "Countdown duration"
+msgstr "Countdown duration"
 
 #: settings.xml
 msgctxt "#32038"
-msgid "Seconds to count down before playing the next episode (3-60)."
-msgstr "Seconds to count down before playing the next episode (3-60)."
+msgid "Seconds to count down at the credits point before playing the next episode."
+msgstr "Seconds to count down at the credits point before playing the next episode."
 
 #: settings.xml
 msgctxt "#32039"
-msgid "Notification duration (3-10 seconds)"
-msgstr "Notification duration (3-10 seconds)"
+msgid "Notification duration"
+msgstr "Notification duration"
 
 #: settings.xml
 msgctxt "#32040"
-msgid "How long a notification stays on screen (3-5)."
-msgstr "How long a notification stays on screen (3-5)."
+msgid "How long a notification stays on screen."
+msgstr "How long a notification stays on screen."
 
 #: settings.xml
 msgctxt "#32041"
-msgid "Notification transparency (%)"
-msgstr "Notification transparency (%)"
+msgid "Notification transparency"
+msgstr "Notification transparency"
 
 #: settings.xml
 msgctxt "#32042"
@@ -205,13 +185,13 @@ msgstr "0-100. 0 is fully opaque, 100 is fully transparent (text only)."
 
 #: settings.xml
 msgctxt "#32043"
-msgid "Notification vertical position (0-200)"
-msgstr "Notification vertical position (%)"
+msgid "Notification vertical position"
+msgstr "Notification vertical position"
 
 #: settings.xml
 msgctxt "#32044"
-msgid "0-90. Larger moves it down; 10% stays within the top black bar of 2.39:1 movies."
-msgstr "0-90. Larger moves it down; 10% stays within the top black bar of 2.39:1 movies."
+msgid "0-90. Larger values move it down."
+msgstr "0-90. Larger values move it down."
 
 #: settings.xml
 msgctxt "#32045"
@@ -240,13 +220,13 @@ msgstr "Right"
 
 #: settings.xml
 msgctxt "#32050"
-msgid "Use Emby intro/credits points"
-msgstr "Use Emby intro/credits points"
+msgid "Use Emby markers"
+msgstr "Use Emby markers"
 
 #: settings.xml
 msgctxt "#32051"
-msgid "Manual records still win; when a season has none, read IntroEnd/CreditsStart from the Emby for Kodi local database. Requires Emby to have synced those points."
-msgstr "Manual records still win; when a season has none, read IntroEnd/CreditsStart from the Emby for Kodi local database. Requires Emby to have synced those points."
+msgid "Per-episode markers win, then Emby markers, then the season marker. Requires Emby to have synced them."
+msgstr "Per-episode markers win, then Emby markers, then the season marker. Requires Emby to have synced them."
 
 #: settings.xml
 msgctxt "#32052"
@@ -260,8 +240,8 @@ msgstr "Turn this off to skip intros silently, without a notification on every e
 
 #: default.py
 msgctxt "#32054"
-msgid "No per-episode record; the season default is still in use"
-msgstr "No per-episode record; the season default is still in use"
+msgid "No per-episode marker; the season marker is still in use"
+msgstr "No per-episode marker; the season marker is still in use"
 
 #: settings.xml
 msgctxt "#32055"
@@ -275,5 +255,10 @@ msgstr "Skip Intro - How to use"
 
 #: default.py
 msgctxt "#32057"
-msgid "1) Shortcuts\nCreate or edit userdata/keymaps/keyboard.xml and bind these two commands:\nRecord a skip point: RunScript(plugin.video.skipintro, mode=record_skip_point)\nDelete a skip point: RunScript(plugin.video.skipintro, mode=delete_skip_point)\n\n2) Recording rules\nWithin the first 20% of playback, the record key sets the intro end point.\nWithin the last 20%, it sets the outro length, counted back from the end, so episodes of different length still work.\n\n3) Season default and per-episode override\nThe first record of a season becomes the default for the whole season. After that, recording a single episode only affects that episode.\nThe delete key only removes the current episode's record; it never clears the season default.\n\n4) Emby points\nWith 'Use Emby intro/credits points' enabled, episodes already marked in Emby need no manual recording."
-msgstr "1) Shortcuts\nCreate or edit userdata/keymaps/keyboard.xml and bind these two commands:\nRecord a skip point: RunScript(plugin.video.skipintro, mode=record_skip_point)\nDelete a skip point: RunScript(plugin.video.skipintro, mode=delete_skip_point)\n\n2) Recording rules\nWithin the first 20% of playback, the record key sets the intro end point.\nWithin the last 20%, it sets the outro length, counted back from the end, so episodes of different length still work.\n\n3) Season default and per-episode override\nThe first record of a season becomes the default for the whole season. After that, recording a single episode only affects that episode.\nThe delete key only removes the current episode's record; it never clears the season default.\n\n4) Emby points\nWith 'Use Emby intro/credits points' enabled, episodes already marked in Emby need no manual recording."
+msgid "1) Shortcuts\nCreate or edit userdata/keymaps/keyboard.xml and bind these two commands:\nRecord a marker: RunScript(plugin.video.skipintro, mode=record_skip_point)\nDelete a marker: RunScript(plugin.video.skipintro, mode=delete_skip_point)\n\n2) Recording rules\nWithin the first 20% of playback, the record key sets the intro end point.\nWithin the last 20%, it sets the credits length, counted back from the end, so episodes of different length still work.\n\n3) Season and per-episode markers\nThe first record of a season becomes the season marker. After that, recording a single episode only affects that episode.\nThe delete key only removes the current episode's marker; it never clears the season marker.\n\n4) Emby markers\nWith 'Use Emby markers' enabled, episodes already marked in Emby need no manual recording.\nPriority: per-episode marker > Emby marker > season marker."
+msgstr "1) Shortcuts\nCreate or edit userdata/keymaps/keyboard.xml and bind these two commands:\nRecord a marker: RunScript(plugin.video.skipintro, mode=record_skip_point)\nDelete a marker: RunScript(plugin.video.skipintro, mode=delete_skip_point)\n\n2) Recording rules\nWithin the first 20% of playback, the record key sets the intro end point.\nWithin the last 20%, it sets the credits length, counted back from the end, so episodes of different length still work.\n\n3) Season and per-episode markers\nThe first record of a season becomes the season marker. After that, recording a single episode only affects that episode.\nThe delete key only removes the current episode's marker; it never clears the season marker.\n\n4) Emby markers\nWith 'Use Emby markers' enabled, episodes already marked in Emby need no manual recording.\nPriority: per-episode marker > Emby marker > season marker."
+
+#: default.py
+msgctxt "#32058"
+msgid "Cannot identify the episode number; check the file name"
+msgstr "Cannot identify the episode number; check the file name"
