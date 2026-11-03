@@ -195,8 +195,8 @@ msgstr "通知条垂直位置"
 
 #: settings.xml
 msgctxt "#32044"
-msgid "0-90. Larger values move it down."
-msgstr "0-90，越大越靠下"
+msgid "0-90. Larger values move it down; the bar and the credits countdown share this position."
+msgstr "0-90，越大越靠下；通知条与片尾倒计时共用此位置"
 
 #: settings.xml
 msgctxt "#32045"
@@ -205,8 +205,8 @@ msgstr "通知条水平位置"
 
 #: settings.xml
 msgctxt "#32046"
-msgid "Where the notification bar appears: left, center or right of the screen."
-msgstr "通知条在屏幕上的水平位置：靠左、居中或靠右"
+msgid "Where the bar and the credits countdown appear: left, center or right."
+msgstr "通知条与片尾倒计时的水平位置：靠左、居中或靠右"
 
 #: settings.xml
 msgctxt "#32047"
