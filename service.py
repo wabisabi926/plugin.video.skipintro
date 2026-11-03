@@ -28,6 +28,7 @@ from skipintro.media import (
     get_season_episode_from_state,
 )
 from skipintro.playlist import autofill_playlist_for_current_video
+from skipintro.emby_markers import find_markers, intro_skip_target, outro_trigger_time
 
 
 class SkipCountdownWindow(xbmcgui.WindowXMLDialog):
@@ -116,6 +117,7 @@ class PlayerMonitor(xbmc.Player):
         # 刚记录过跳过点：等通知出现并消失后再起倒计时（带过期时间，避免状态残留）
         self.await_notification_until: Optional[float] = None
         self.state: State = State()
+        self.emby_markers: Optional[dict] = None
         self._cached_playing_state: Optional[bool] = None
         self._state_cache_time: float = 0
         self._state_cache_ttl: float = 0.5
@@ -138,9 +140,33 @@ class PlayerMonitor(xbmc.Player):
         self.outro_triggered = False
         self.pending_outro_deadline = None
         self.await_notification_until = None
+        self.emby_markers = self._load_emby_markers()
         self.check_intro()
         self.retry_update_outro()
         autofill_playlist_for_current_video()
+
+    def _load_emby_markers(self) -> Optional[dict]:
+        """起播时读一次当前剧集的 Emby 记录点；手动记录仍优先。"""
+        if not SETTINGS.use_emby_markers:
+            return None
+        playing_file = ""
+        kodi_id = 0
+        try:
+            playing_file = self.getPlayingFile() or ""
+        except Exception as e:
+            log_debug(f"getPlayingFile failed: {e}")
+        try:
+            kodi_id = int(self.getVideoInfoTag().getDbId() or 0)
+        except Exception as e:
+            log_debug(f"getVideoInfoTag failed: {e}")
+        try:
+            markers = find_markers(playing_file, kodi_id)
+        except Exception as e:
+            log_debug(f"Emby markers lookup failed: {e}")
+            return None
+        if markers:
+            log_debug(f"Emby markers: {markers}")
+        return markers
 
     def onPlayBackEnded(self):
         if self.state.playing_next:
@@ -149,11 +175,13 @@ class PlayerMonitor(xbmc.Player):
             self.state.reset()
             self.current_outro_time = None
             self.outro_triggered = False
+        self.emby_markers = None
 
     def onPlayBackStopped(self):
         self.state.reset()
         self.current_outro_time = None
         self.outro_triggered = False
+        self.emby_markers = None
 
     def onPlayBackPaused(self):
         self.state.pause = True
@@ -181,31 +209,34 @@ class PlayerMonitor(xbmc.Player):
         if not tvshow_id:
             return
 
+        manual_outro = 0
         data = load_skip_data(force_reload=True)
-        if tvshow_id not in data:
-            return
-
-        record = data[tvshow_id]
-        if "seasons" not in record or season not in record["seasons"]:
-            return
-
-        s_data = record["seasons"][season]
+        record = data.get(tvshow_id) or {}
+        seasons = record.get("seasons") or {}
+        s_data = seasons.get(season)
         if isinstance(s_data, dict):
-            outro_duration = s_data.get("outro")
-            if outro_duration:
-                try:
-                    total_time = self.getTotalTime()
-                    if total_time > 0:
-                        new_outro_time = total_time - outro_duration
-                        if self.current_outro_time != new_outro_time:
-                            self.current_outro_time = new_outro_time
-                            self.outro_triggered = False
-                            self.cancel_skip = False
-                except Exception as e:
-                    log(f"Error calculating outro trigger: {e}", xbmc.LOGERROR)
-            elif self.current_outro_time is not None:
-                self.current_outro_time = None
+            manual_outro = s_data.get("outro") or 0
+
+        try:
+            total_time = self.getTotalTime()
+        except Exception as e:
+            log(f"Error getting total time: {e}", xbmc.LOGERROR)
+            return
+        if total_time <= 0:
+            return
+
+        # 手动记录优先；该季没有手动片尾时用 Emby 的 CreditsStart
+        trigger_time = outro_trigger_time(manual_outro, total_time, self.emby_markers)
+        if trigger_time > 0:
+            if self.current_outro_time != trigger_time:
+                self.current_outro_time = trigger_time
                 self.outro_triggered = False
+                self.cancel_skip = False
+            return
+
+        if self.current_outro_time is not None:
+            self.current_outro_time = None
+            self.outro_triggered = False
 
     def check_intro(self) -> None:
         if not self.is_video_playing():
@@ -217,30 +248,31 @@ class PlayerMonitor(xbmc.Player):
 
         state = get_active_video_playlist_state()
         data = load_skip_data()
-        if tvshow_id not in data:
-            return
+        record = data.get(tvshow_id) or {}
+        manual_intro = 0
 
-        record = data[tvshow_id]
-        skip_time = 0
-
-        if "seasons" in record and season in record["seasons"]:
-            val = record["seasons"][season]
-            skip_time = val.get("intro", 0) if isinstance(val, dict) else val
+        seasons = record.get("seasons") or {}
+        if season in seasons:
+            val = seasons[season]
+            manual_intro = val.get("intro", 0) if isinstance(val, dict) else val
         elif "time" in record:
-            skip_time = record["time"]
+            manual_intro = record["time"]
 
-        if skip_time > 0:
-            try:
-                current_time = self.getTime()
-                if current_time < skip_time:
-                    log_debug(f"Auto skipping intro for {show_title} S{season}. Current: {current_time}, Target: {skip_time}")
-                    self.seekTime(skip_time)
+        # 手动记录优先；没有手动片头时用 Emby 的 IntroEnd
+        skip_time = intro_skip_target(manual_intro, self.emby_markers)
+        if skip_time <= 0:
+            return
+        try:
+            current_time = self.getTime()
+            if current_time < skip_time:
+                log_debug(f"Auto skipping intro for {show_title} S{season}. Current: {current_time}, Target: {skip_time}")
+                self.seekTime(skip_time)
 
-                    season_num, episode_num = get_season_episode_from_state(source_type, state, season)
-                    notification_text = SETTINGS.get_string(32000) % (season_num, episode_num)
-                    show_notification(notification_text)
-            except Exception as e:
-                log(f"Error during skip: {e}", xbmc.LOGERROR)
+                season_num, episode_num = get_season_episode_from_state(source_type, state, season)
+                notification_text = SETTINGS.get_string(32000) % (season_num, episode_num)
+                show_notification(notification_text)
+        except Exception as e:
+            log(f"Error during skip: {e}", xbmc.LOGERROR)
 
 
 def create_countdown_window() -> Tuple[Optional[SkipCountdownWindow], Optional[threading.Thread]]:

@@ -237,3 +237,13 @@ msgstr "Center"
 msgctxt "#32049"
 msgid "Right"
 msgstr "Right"
+
+#: settings.xml
+msgctxt "#32050"
+msgid "Use Emby intro/credits points"
+msgstr "Use Emby intro/credits points"
+
+#: settings.xml
+msgctxt "#32051"
+msgid "Manual records still win; when a season has none, read IntroEnd/CreditsStart from the Emby for Kodi local database. Requires Emby to have synced those points."
+msgstr "Manual records still win; when a season has none, read IntroEnd/CreditsStart from the Emby for Kodi local database. Requires Emby to have synced those points."

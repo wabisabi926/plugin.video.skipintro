@@ -510,6 +510,12 @@ class SettingsManager:
         return value == 'true'
 
     @property
+    def use_emby_markers(self) -> bool:
+        """是否读取 Emby 本地记录点；默认开，手动记录仍然优先。"""
+        value: Optional[str] = self._get_setting('use_emby_markers')
+        return value != 'false'
+
+    @property
     def debug_mode(self) -> bool:
         value: Optional[str] = self._get_setting('debug_mode')
         return value == 'true'

@@ -237,3 +237,13 @@ msgstr "居中"
 msgctxt "#32049"
 msgid "Right"
 msgstr "靠右"
+
+#: settings.xml
+msgctxt "#32050"
+msgid "Use Emby intro/credits points"
+msgstr "使用 Emby 记录点"
+
+#: settings.xml
+msgctxt "#32051"
+msgid "Manual records still win; when a season has none, read IntroEnd/CreditsStart from the Emby for Kodi local database. Requires Emby to have synced those points."
+msgstr "手动记录优先；该季没有手动记录时，读取 Emby for Kodi 本地库里的片头/片尾点。需要 Emby 已同步这些记录点。"
