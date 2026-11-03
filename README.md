@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.4.6-blue.svg)](https://github.com/wabisabi926/plugin.video.skipintro)
+[![Version](https://img.shields.io/badge/version-1.4.7-blue.svg)](https://github.com/wabisabi926/plugin.video.skipintro)
 [![License](https://img.shields.io/badge/license-NC--3.0-green.svg)](LICENSE.txt)
 [![Platform](https://img.shields.io/badge/platform-Kodi-orange.svg)](https://kodi.tv/)
 
@@ -325,17 +325,17 @@ addon_data/plugin.video.skipintro/skip_intro_data.json
 
 ## 更新日志
 
-### 未发布
-- ✨ **支持 Emby 标记**：读取 Emby for Kodi 本地库里的片头/片尾标记，没手动记录过的剧也能自动跳过
-- ✨ **单集覆盖**：某季第一次记录作为整季默认值，之后单独记录某一集只影响那一集；删除键只删本集，不会误清整季
+### v1.4.7 (2026-11)
+- ✨ **支持 Emby 标记**：读取 Emby for Kodi 本地库里的片头/片尾标记，Emby 已标记的剧集无需手动记录
+- ✨ **单集覆盖**：某季第一次记录作为整季标记，之后单独记录某一集只影响那一集；删除键只删本集，不会误清整季
 - ⚖️ **生效优先级**：本集标记 > Emby 标记 > 整季标记 > 不跳过
-- ⚙️ 新增设置「使用 Emby 标记」（默认开启）、「跳过片头时显示提示」（默认开启）
-- 📖 设置页新增「使用说明」，内含快捷键绑定与记录规则
-- 🐛 修复季数据浅拷贝导致 `episodes` 嵌套字典被共享修改的问题
+- ⚙️ 新增设置「使用 Emby 标记」「跳过片头时显示提示」，均默认开启
+- 📖 **帮助补全**：`settings.xml` 迁移到 `version="1"` 格式，11 个设置项选中时都在设置页底部显示说明
+- 📖 **使用说明**：设置页「使用说明」打开完整说明（快捷键、记录规则、优先级、倒计时、通知）；也可用 `mode=menu` 打开主菜单
+- 🐛 修复季数据浅拷贝导致 `episodes` 嵌套字典被共享修改
 - 🐛 集号无法可靠解析时不再写入，避免静默改掉整季标记
-- 🎨 文案统一为「标记」，修正英文设置描述与实际取值范围不一致的问题
-- 📖 帮助改为完整说明：快捷键、记录规则、整季与单集标记、优先级、Emby 标记、片尾倒计时、通知
-- 📖 插件主界面菜单（使用说明 / 删除所有标记 / 设置），可用 `mode=menu` 或直接运行插件打开
+- 🎨 文案统一为「标记」；修正英文设置描述与实际取值范围不一致（原写 3-60 / 3-5，实际 3-10）
+- 🔧 记录通知补上集号：`已记录片头：03:19（S01E05）`
 
 ### v1.4.6 (2026-10)
 - 🔧 **代码结构优化**：业务模块 `common` / `media` / `playlist` 迁入 `resources/lib/skipintro` 包，根目录仅保留 `default.py` / `service.py` 作为插件入口，降低模块重名冲突风险
