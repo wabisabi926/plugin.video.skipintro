@@ -1,7 +1,11 @@
 # -*- coding: utf-8 -*-
-"""纯函数回归测试：文件名解析、自然排序、通知宽度估算。"""
+"""纯函数回归测试：文件名解析、目录回退、自然排序、通知宽度估算。"""
+import os
+import tempfile
 import unittest
+from unittest import mock
 
+import skipintro.media as media
 from skipintro.common import (
     _get_cached_data,
     _parse_season_data,
@@ -11,6 +15,8 @@ from skipintro.common import (
 )
 from skipintro.media import (
     extract_media_info_from_filename,
+    get_directory_playlist_files,
+    get_next_file_in_directory,
     invalidate_playlist_state_cache,
     natural_sort_key,
 )
@@ -87,6 +93,58 @@ class WindowWidthTest(unittest.TestCase):
         self.assertLess(
             notification_window_width("片"), notification_window_width("片片")
         )
+
+
+class DirectoryListingFallbackTest(unittest.TestCase):
+
+    def test_falls_back_to_xbmcvfs(self):
+        with mock.patch.object(media, "jsonrpc_call", return_value=None), \
+                mock.patch("xbmcvfs.listdir",
+                           return_value=([], ["Show.S01E02.mkv", "Show.S01E01.mkv", "readme.txt"])):
+            files = get_directory_playlist_files(r"C:\Shows\Show.S01E01.mkv")
+
+        self.assertEqual(files, [
+            "C:/Shows/Show.S01E01.mkv",
+            "C:/Shows/Show.S01E02.mkv",
+        ])
+
+    def test_falls_back_to_os_listdir(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for name in ("Show.S01E02.mkv", "Show.S01E01.mkv", "readme.txt"):
+                open(os.path.join(directory, name), "wb").close()
+            current = os.path.join(directory, "Show.S01E01.mkv")
+
+            with mock.patch.object(media, "jsonrpc_call", return_value=None), \
+                    mock.patch("xbmcvfs.listdir", side_effect=OSError("denied")):
+                files = get_directory_playlist_files(current)
+
+        self.assertEqual([os.path.basename(path) for path in files], [
+            "Show.S01E01.mkv",
+            "Show.S01E02.mkv",
+        ])
+
+    def test_jsonrpc_success_skips_fallback(self):
+        result = {"files": [
+            {"file": "C:/Shows/B.mkv", "filetype": "file", "label": "B"},
+            {"file": "C:/Shows/A.mkv", "filetype": "file", "label": "A"},
+        ]}
+        with mock.patch.object(media, "jsonrpc_call", return_value=result), \
+                mock.patch("xbmcvfs.listdir", side_effect=AssertionError("should not fall back")):
+            files = get_directory_playlist_files(r"C:\Shows\Show.S01E01.mkv")
+
+        self.assertEqual(files, ["C:/Shows/A.mkv", "C:/Shows/B.mkv"])
+
+    def test_next_file_uses_directory_fallback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for name in ("Show.S01E01.mkv", "Show.S01E02.mkv"):
+                open(os.path.join(directory, name), "wb").close()
+            current = os.path.join(directory, "Show.S01E01.mkv")
+
+            with mock.patch.object(media, "jsonrpc_call", return_value=None), \
+                    mock.patch("xbmcvfs.listdir", side_effect=OSError("denied")):
+                next_file = get_next_file_in_directory(current)
+
+        self.assertEqual(os.path.basename(next_file), "Show.S01E02.mkv")
 
 
 class PlaylistStateCacheTest(unittest.TestCase):

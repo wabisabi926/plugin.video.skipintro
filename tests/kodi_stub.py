@@ -64,4 +64,9 @@ _install(
     ControlLabel=object,
 )
 _install("xbmcaddon", Addon=_FakeAddon)
-_install("xbmcvfs", translatePath=lambda p: _TMP_DIR, exists=lambda p: os.path.exists(p))
+_install(
+    "xbmcvfs",
+    translatePath=lambda p: _TMP_DIR,
+    exists=lambda p: os.path.exists(p),
+    listdir=lambda p: ([], []),
+)

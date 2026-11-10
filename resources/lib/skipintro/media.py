@@ -309,6 +309,13 @@ def normalize_media_path(path: str) -> str:
     return normalized.replace('\\', '/').rstrip('/')
 
 
+VIDEO_EXTENSIONS = {
+    ".3gp", ".asf", ".avi", ".flv", ".iso", ".m2ts", ".m4v", ".mkv", ".mov",
+    ".mp4", ".mpeg", ".mpg", ".mxf", ".ogv", ".rmvb", ".strm", ".ts", ".vob",
+    ".webm", ".wmv",
+}
+
+
 # Patterns for extracting season/episode info from filenames
 # Ordered by priority: most specific patterns first
 _FILENAME_PATTERNS: List[re.Pattern] = [
@@ -515,6 +522,54 @@ def get_current_episode_number(source_type: str, season: Any = None,
     return 0
 
 
+def _directory_entry_path(directory: str, name: str) -> str:
+    if "/" in name or "\\" in name:
+        return normalize_media_path(name)
+    return directory.rstrip("/") + "/" + name
+
+
+def _directory_items_from_names(directory: str, names: Any) -> List[Tuple[str, str]]:
+    items = []
+    for raw_name in names or []:
+        name = str(raw_name or "").strip()
+        if not name:
+            continue
+        if os.path.splitext(name)[1].casefold() not in VIDEO_EXTENSIONS:
+            continue
+        path = _directory_entry_path(directory, name)
+        sort_title = os.path.splitext(os.path.basename(normalize_media_path(path)))[0]
+        items.append((sort_title, path))
+    return items
+
+
+def _sort_directory_items(items: List[Tuple[str, str]]) -> List[str]:
+    items.sort(key=lambda value: (natural_sort_key(value[0]),
+                                  normalize_media_path(value[1]).casefold()))
+    return [file_path for _, file_path in items]
+
+
+def _directory_items_from_vfs(directory: str) -> List[Tuple[str, str]]:
+    try:
+        import xbmcvfs
+
+        _, names = xbmcvfs.listdir(directory)
+    except Exception as e:
+        log_debug(f"xbmcvfs.listdir failed for {directory}: {e}")
+        return []
+    return _directory_items_from_names(directory, names)
+
+
+def _directory_items_from_os(directory: str) -> List[Tuple[str, str]]:
+    if "://" in directory:
+        return []
+    try:
+        names = os.listdir(directory)
+    except OSError as e:
+        log_debug(f"os.listdir failed for {directory}: {e}")
+        return []
+    return _directory_items_from_names(directory, names)
+
+
 def get_directory_playlist_files(current_file: str) -> List[str]:
     try:
         if not current_file:
@@ -529,31 +584,35 @@ def get_directory_playlist_files(current_file: str) -> List[str]:
             {"directory": parent_dir, "media": "video", "properties": ["file", "title"]},
         ) or {}
 
-        if not isinstance(result, dict):
-            return []
+        files = result.get("files") if isinstance(result, dict) else None
+        if isinstance(files, list) and files:
+            playlist_items = []
+            for item in files:
+                if not isinstance(item, dict):
+                    continue
 
-        files = result.get("files") or []
-        if not isinstance(files, list):
-            return []
+                file_path = item.get("file")
+                if not file_path:
+                    continue
 
-        playlist_items = []
-        for item in files:
-            if not isinstance(item, dict):
-                continue
+                file_type = item.get("filetype")
+                if file_type and file_type != "file":
+                    continue
 
-            file_path = item.get("file")
-            if not file_path:
-                continue
+                sort_title = item.get("title") or item.get("label") or os.path.basename(normalize_media_path(file_path))
+                playlist_items.append((sort_title, file_path))
 
-            file_type = item.get("filetype")
-            if file_type and file_type != "file":
-                continue
+            return _sort_directory_items(playlist_items)
 
-            sort_title = item.get("title") or item.get("label") or os.path.basename(normalize_media_path(file_path))
-            playlist_items.append((sort_title, file_path))
-
-        playlist_items.sort(key=lambda value: (natural_sort_key(value[0]), normalize_media_path(value[1]).casefold()))
-        return [file_path for _, file_path in playlist_items]
+        # Kodi 22 起 Files.GetDirectory 会拒绝本地/部分 VFS 路径，改用目录 API 兜底
+        fallback_items = _directory_items_from_vfs(parent_dir)
+        if not fallback_items:
+            fallback_items = _directory_items_from_os(parent_dir)
+        if fallback_items:
+            log_debug(f"Directory listing fallback for {parent_dir}: "
+                      f"{len(fallback_items)} file(s)")
+            return _sort_directory_items(fallback_items)
+        return []
     except Exception as e:
         log(f"get_directory_playlist_files error: {e}", xbmc.LOGERROR)
         return []
