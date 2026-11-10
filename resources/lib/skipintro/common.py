@@ -536,7 +536,8 @@ def get_outro_trigger(record: Any, season: Any, episode: Any, total_time: Any,
                       auto_seconds: Any = 0) -> Tuple[float, str]:
     """片尾触发点（绝对秒）。本地存「距结尾秒数」，Emby 存绝对秒，这里统一换算。
 
-    优先级与 get_skip_point 一致；总时长不足以容纳本地值时视为无效。
+    优先级与 get_skip_point 一致。本集标记为 0 表示「本集不跳」；非 0 但
+    总时长不足以容纳时视为坏数据，继续使用 Emby / 季基准。
     """
     total = _to_seconds(total_time)
     season_data = _season_copy(record, season)
@@ -546,7 +547,14 @@ def get_outro_trigger(record: Any, season: Any, episode: Any, total_time: Any,
         ep_data = episodes.get(str(episode))
         if isinstance(ep_data, dict) and "outro" in ep_data:
             value = _to_seconds(ep_data.get("outro"))
-            return (total - value if value > 0 and total > value else 0.0), "episode"
+            if value <= 0:
+                return 0.0, "episode"
+            if total > value:
+                return total - value, "episode"
+            log_warning(
+                f"Episode outro marker {value:.0f}s exceeds duration {total:.0f}s; "
+                "falling back to Emby/season"
+            )
 
     auto = _to_seconds(auto_seconds)
     if auto > 0:
@@ -580,12 +588,27 @@ def get_outro_countdown_seconds(configured: Any, current: Any, trigger: Any,
     return max(1.0, remaining)
 
 
+def _write_episode_point(season_data: Dict[str, Any], episode: Any, key: str,
+                         seconds: float) -> None:
+    episodes = season_data.get("episodes")
+    if not isinstance(episodes, dict):
+        episodes = {}
+        season_data["episodes"] = episodes
+
+    ep_data = episodes.get(str(episode))
+    if not isinstance(ep_data, dict):
+        ep_data = {}
+        episodes[str(episode)] = ep_data
+    ep_data[key] = seconds
+
+
 def set_skip_point(record: Dict[str, Any], season: Any, episode: Any, key: str,
                    value: Any) -> str:
     """写入记录点，返回写入层级 season / episode / unknown / none。
 
-    该字段还没有整季标记时建立标记（全季生效），已有标记时只写本集标记。
-    集号无法确定时返回 unknown 且不写入，避免静默覆盖整季标记。
+    该字段还没有整季标记时建立标记（全季生效），并在集号已知时同时写一条
+    本集标记，保证记录的这一集立即生效（即使 Emby 有标记）。已有整季标记时
+    只写本集标记。集号无法确定时返回 unknown 且不写入，避免静默覆盖整季标记。
     """
     seconds = _to_seconds(value)
     seasons = record.get("seasons")
@@ -600,25 +623,20 @@ def set_skip_point(record: Dict[str, Any], season: Any, episode: Any, key: str,
         if season_data is None:
             return "none"
         season_data[key] = seconds
+        if episode:
+            _write_episode_point(season_data, episode, key, seconds)
         return "season"
 
     if not _to_seconds(season_data.get(key)):
         season_data[key] = seconds
+        if episode:
+            _write_episode_point(season_data, episode, key, seconds)
         return "season"
 
     if not episode:
         return "unknown"
 
-    episodes = season_data.get("episodes")
-    if not isinstance(episodes, dict):
-        episodes = {}
-        season_data["episodes"] = episodes
-
-    ep_data = episodes.get(str(episode))
-    if not isinstance(ep_data, dict):
-        ep_data = {}
-        episodes[str(episode)] = ep_data
-    ep_data[key] = seconds
+    _write_episode_point(season_data, episode, key, seconds)
     return "episode"
 
 

@@ -6,7 +6,12 @@ import sqlite3
 import tempfile
 import unittest
 
-from skipintro.emby_markers import find_markers, server_id_from_db
+from skipintro.emby_markers import (
+    _connect,
+    _query_markers_by_exact_path,
+    find_markers,
+    server_id_from_db,
+)
 
 
 def make_db(rows, episodes=()):
@@ -67,6 +72,25 @@ class EmbyMarkersTest(unittest.TestCase):
 
     def test_server_id_from_db_name(self):
         self.assertEqual(server_id_from_db("emby_abc123.db"), "abc123")
+
+    def test_exact_path_matches_url_encoded_and_kodi_options(self):
+        db = make_db(rows=[
+            ("100", "m1", "Show.S01E01", "smb://nas/剧集/Show.S01E01.mkv",
+             100, 0, 0, 2380),
+        ])
+        try:
+            con = _connect(db)
+            try:
+                found, markers = _query_markers_by_exact_path(
+                    con,
+                    "smb://nas/%E5%89%A7%E9%9B%86/Show.S01E01.mkv|redirect-limit=1000",
+                )
+            finally:
+                con.close()
+        finally:
+            os.unlink(db)
+        self.assertTrue(found)
+        self.assertEqual(markers["credits_start"], 2380)
 
 
 class StrictFallbackTest(unittest.TestCase):

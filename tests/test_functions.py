@@ -3,11 +3,17 @@
 import unittest
 
 from skipintro.common import (
+    _get_cached_data,
     _parse_season_data,
+    _set_cached_data,
     measure_notification_text,
     notification_window_width,
 )
-from skipintro.media import extract_media_info_from_filename, natural_sort_key
+from skipintro.media import (
+    extract_media_info_from_filename,
+    invalidate_playlist_state_cache,
+    natural_sort_key,
+)
 
 
 class FilenameParsingTest(unittest.TestCase):
@@ -81,6 +87,14 @@ class WindowWidthTest(unittest.TestCase):
         self.assertLess(
             notification_window_width("片"), notification_window_width("片片")
         )
+
+
+class PlaylistStateCacheTest(unittest.TestCase):
+    def test_invalidate_clears_cached_state(self):
+        _set_cached_data('playlist_state', {'episode': 1})
+        self.assertEqual(_get_cached_data('playlist_state')[0], {'episode': 1})
+        invalidate_playlist_state_cache()
+        self.assertEqual(_get_cached_data('playlist_state'), (None, False))
 
 
 class SeasonDataTest(unittest.TestCase):

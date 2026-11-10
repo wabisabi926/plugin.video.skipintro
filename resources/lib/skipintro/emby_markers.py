@@ -167,10 +167,12 @@ def _query_markers_by_exact_path(con: sqlite3.Connection,
                                  playing_file: str) -> Tuple[bool, Optional[Dict[str, Any]]]:
     """按完整路径查。查询串不裁剪，避免把通用的 video.mkv 全匹配到一起。"""
     raw = (playing_file or "").replace("\\", "/")
-    stripped = _strip_kodi_options(playing_file)
-    candidates = [raw]
-    if stripped and stripped != raw:
-        candidates.append(stripped)
+    decoded = urllib.parse.unquote(raw)
+    candidates = []
+    for candidate in (raw, _strip_kodi_options(raw),
+                      decoded, _strip_kodi_options(decoded)):
+        if candidate and candidate not in candidates:
+            candidates.append(candidate)
 
     cur = con.cursor()
     for candidate in candidates:

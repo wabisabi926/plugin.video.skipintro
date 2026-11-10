@@ -383,6 +383,15 @@ def _extract_episode_id(item_data: Dict[str, Any]) -> Optional[int]:
     return item_id if item_id > 0 else None
 
 
+def invalidate_playlist_state_cache() -> None:
+    """播放项切换时清缓存，避免新一集起播时用到上一集的 episode/season。"""
+    with _cache_lock:
+        cache = _caches.get('playlist_state')
+        if cache:
+            cache['data'] = None
+            cache['time'] = 0.0
+
+
 def get_active_video_playlist_state() -> Optional[Dict[str, Any]]:
     cached, hit = _get_cached_data('playlist_state')
     if hit:

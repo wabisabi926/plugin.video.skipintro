@@ -22,12 +22,13 @@ def make_record(season="1"):
 
 class SetPointTest(unittest.TestCase):
 
-    def test_first_record_becomes_season_default(self):
+    def test_first_record_sets_season_and_current_episode(self):
         record = make_record()
         layer = set_skip_point(record, "1", 5, "intro", 100)
         self.assertEqual(layer, "season")
         self.assertEqual(record["seasons"]["1"]["intro"], 100)
-        self.assertNotIn("episodes", record["seasons"]["1"])
+        # 首次记录同时写本集覆盖，保证当前集立即生效（即使 Emby 有标记）
+        self.assertEqual(record["seasons"]["1"]["episodes"]["5"]["intro"], 100)
 
     def test_later_record_only_overrides_that_episode(self):
         record = make_record()
@@ -53,6 +54,8 @@ class SetPointTest(unittest.TestCase):
         self.assertEqual(set_skip_point(record, "1", 3, "outro", 60), "season")
         self.assertEqual(record["seasons"]["1"]["intro"], 100)
         self.assertEqual(record["seasons"]["1"]["outro"], 60)
+        self.assertEqual(record["seasons"]["1"]["episodes"]["3"]["intro"], 100)
+        self.assertEqual(record["seasons"]["1"]["episodes"]["3"]["outro"], 60)
 
     def test_unknown_episode_does_not_overwrite_season_marker(self):
         record = make_record()
@@ -60,12 +63,13 @@ class SetPointTest(unittest.TestCase):
         layer = set_skip_point(record, "1", 0, "intro", 120)
         self.assertEqual(layer, "unknown")
         self.assertEqual(record["seasons"]["1"]["intro"], 100)
-        self.assertNotIn("episodes", record["seasons"]["1"])
+        self.assertEqual(record["seasons"]["1"]["episodes"], {"1": {"intro": 100}})
 
     def test_unknown_episode_creates_season_marker_when_empty(self):
         record = make_record()
         self.assertEqual(set_skip_point(record, "1", 0, "intro", 120), "season")
         self.assertEqual(record["seasons"]["1"]["intro"], 120)
+        self.assertNotIn("episodes", record["seasons"]["1"])
 
 
 class ResolveIntroTest(unittest.TestCase):
@@ -100,6 +104,13 @@ class ResolveIntroTest(unittest.TestCase):
     def test_missing_season_uses_emby(self):
         self.assertEqual(get_skip_point({}, "3", 7, "intro", 90)[0], 90)
 
+    def test_first_record_overrides_emby_for_recorded_episode(self):
+        record = make_record()
+        set_skip_point(record, "1", 1, "intro", 100)
+        self.assertEqual(get_skip_point(record, "1", 1, "intro", 200), (100.0, "episode"))
+        # 其他集仍优先使用 Emby
+        self.assertEqual(get_skip_point(record, "1", 2, "intro", 200), (200.0, "auto"))
+
 
 class ResolveOutroTest(unittest.TestCase):
 
@@ -122,6 +133,32 @@ class ResolveOutroTest(unittest.TestCase):
         record = make_record()
         set_skip_point(record, "1", 1, "outro", 600)
         self.assertEqual(get_outro_trigger(record, "1", 2, 300)[0], 0)
+
+    def test_first_outro_record_overrides_emby_for_recorded_episode(self):
+        record = make_record()
+        set_skip_point(record, "1", 1, "outro", 60)
+        self.assertEqual(
+            get_outro_trigger(record, "1", 1, 2700, 2500), (2640.0, "episode")
+        )
+        self.assertEqual(
+            get_outro_trigger(record, "1", 2, 2700, 2500), (2500.0, "auto")
+        )
+
+    def test_invalid_episode_override_falls_back_to_emby(self):
+        record = make_record()
+        set_skip_point(record, "1", 1, "outro", 60)
+        set_skip_point(record, "1", 2, "outro", 600)
+        self.assertEqual(
+            get_outro_trigger(record, "1", 2, 300, 250), (250.0, "auto")
+        )
+
+    def test_explicit_zero_episode_override_disables(self):
+        record = make_record()
+        set_skip_point(record, "1", 1, "outro", 60)
+        set_skip_point(record, "1", 2, "outro", 0)
+        self.assertEqual(
+            get_outro_trigger(record, "1", 2, 2700, 2500), (0.0, "episode")
+        )
 
 
 class OutroCountdownTest(unittest.TestCase):
@@ -153,13 +190,15 @@ class ClearPointTest(unittest.TestCase):
         set_skip_point(record, "1", 2, "intro", 130)
         self.assertEqual(clear_skip_point(record, "1", 2, "intro"), "episode")
         self.assertEqual(record["seasons"]["1"]["intro"], 100)
-        self.assertNotIn("episodes", record["seasons"]["1"])
+        # 首次记录产生的本集覆盖仍在，只删掉了第 2 集
+        self.assertEqual(record["seasons"]["1"]["episodes"], {"1": {"intro": 100}})
 
     def test_clear_without_override_keeps_season_default(self):
         record = make_record()
         set_skip_point(record, "1", 1, "intro", 100)
         self.assertEqual(clear_skip_point(record, "1", 2, "intro"), "none")
         self.assertEqual(record["seasons"]["1"]["intro"], 100)
+        self.assertEqual(record["seasons"]["1"]["episodes"]["1"]["intro"], 100)
 
     def test_prune_removes_empty_entries(self):
         data = {"280": {"title": "Show", "seasons": {"1": {"episodes": {}}}}}

@@ -24,7 +24,8 @@ from skipintro.common import (
 from skipintro.media import (
     get_current_tvshow_info, get_next_episode_from_library,
     play_episode_from_library, is_next_episode_available_in_playlist,
-    get_active_video_playlist_state, get_next_file_in_directory, play_file,
+    get_active_video_playlist_state, invalidate_playlist_state_cache,
+    get_next_file_in_directory, play_file,
     extract_media_info_from_filename, mark_current_episode_as_watched,
     get_season_episode_from_state, get_current_episode_number,
 )
@@ -122,6 +123,8 @@ class PlayerMonitor(xbmc.Player):
         self.await_notification_until: Optional[float] = None
         self.state: State = State()
         self.emby_markers: Optional[dict] = None
+        self._emby_retry_done: bool = False
+        self._outro_lock = threading.Lock()
         self._cached_playing_state: Optional[bool] = None
         self._state_cache_time: float = 0
         self._state_cache_ttl: float = 0.5
@@ -144,9 +147,12 @@ class PlayerMonitor(xbmc.Player):
         self.outro_triggered = False
         self.pending_outro_deadline = None
         self.await_notification_until = None
+        # 上一集的播放状态缓存不能带进新一集，否则会算错单集覆盖
+        invalidate_playlist_state_cache()
+        self._emby_retry_done = False
         self.emby_markers = self._load_emby_markers()
         self.check_intro()
-        self.retry_update_outro()
+        self._start_outro_retry()
         autofill_playlist_for_current_video()
 
     def _load_emby_markers(self) -> Optional[dict]:
@@ -171,6 +177,22 @@ class PlayerMonitor(xbmc.Player):
         if markers:
             log_debug(f"Emby markers: {markers}")
         return markers
+
+    def _ensure_emby_markers(self) -> None:
+        """起播时 Emby 库被锁/查询失败时，在算片尾前再试一次。"""
+        if self.emby_markers is not None or self._emby_retry_done:
+            return
+        if not SETTINGS.use_emby_markers:
+            return
+        self._emby_retry_done = True
+        self.emby_markers = self._load_emby_markers()
+        if self.emby_markers:
+            log_debug("Emby markers loaded on retry")
+
+    def _start_outro_retry(self) -> None:
+        # 流媒体起播时 totalTime 可能迟迟不可用，放后台重试，别卡播放器回调
+        thread = threading.Thread(target=self.retry_update_outro, daemon=True)
+        thread.start()
 
     def onPlayBackEnded(self):
         if self.state.playing_next:
@@ -206,6 +228,10 @@ class PlayerMonitor(xbmc.Player):
         log("retry_update_outro: failed to get totalTime after max retries", xbmc.LOGWARNING)
 
     def update_outro_info(self) -> None:
+        with self._outro_lock:
+            self._update_outro_info()
+
+    def _update_outro_info(self) -> None:
         if not self.is_video_playing():
             return
 
@@ -213,6 +239,7 @@ class PlayerMonitor(xbmc.Player):
         if not tvshow_id:
             return
 
+        self._ensure_emby_markers()
         data = load_skip_data(force_reload=True)
         record = data.get(tvshow_id) or {}
 
@@ -388,10 +415,11 @@ def execute_next_episode(countdown_state: CountdownState) -> None:
     countdown_state.active = False
 
 
-def has_next_episode() -> bool:
+def has_next_episode() -> Optional[bool]:
+    """是否有下一集。None 表示播放器/播放列表状态暂时查不到，不代表最后一集。"""
     state = get_active_video_playlist_state()
     if not state:
-        return False
+        return None
 
     playlist_position = state.get("position")
     playlist_id = state.get("playlistid")
@@ -575,19 +603,24 @@ if __name__ == '__main__':
                             # 通知（如"已记录片尾"）仍在显示或即将出现：等它播完再起倒计时，
                             # 避免窗口叠加；倒计时会按到记录点的剩余距离自动缩短
                             pass
-                        elif not has_next_episode():
-                            player.pending_outro_deadline = None
-                            player.await_notification_until = None
-                            show_notification(
-                                SETTINGS.get_string(32032),
-                                duration=NOTIFICATION_DURATION_LONG
-                            )
-                            mark_current_episode_as_watched()
-                            player.outro_triggered = True
                         else:
-                            player.pending_outro_deadline = None
-                            player.await_notification_until = None
-                            handle_outro_enter(countdown_state, player)
+                            next_status = has_next_episode()
+                            if next_status is None:
+                                # 播放器/播放列表状态暂时查不到：下一轮再试，避免误判最后一集
+                                pass
+                            elif next_status is False:
+                                player.pending_outro_deadline = None
+                                player.await_notification_until = None
+                                show_notification(
+                                    SETTINGS.get_string(32032),
+                                    duration=NOTIFICATION_DURATION_LONG
+                                )
+                                mark_current_episode_as_watched()
+                                player.outro_triggered = True
+                            else:
+                                player.pending_outro_deadline = None
+                                player.await_notification_until = None
+                                handle_outro_enter(countdown_state, player)
             except Exception as e:
                 log(f"Error in outro handling loop: {e}", xbmc.LOGERROR)
                 countdown_state.cleanup()
