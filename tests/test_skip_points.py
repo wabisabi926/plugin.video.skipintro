@@ -2,10 +2,13 @@
 """分层记录点测试：季基准 + 本集覆盖，以及 Emby 自动记录点的优先级。"""
 
 import unittest
+from unittest import mock
 
+import skipintro.common as common
 from skipintro.common import (
     _parse_season_data,
     clear_skip_point,
+    get_outro_countdown_seconds,
     get_outro_trigger,
     get_skip_point,
     prune_skip_record,
@@ -121,6 +124,27 @@ class ResolveOutroTest(unittest.TestCase):
         self.assertEqual(get_outro_trigger(record, "1", 2, 300)[0], 0)
 
 
+class OutroCountdownTest(unittest.TestCase):
+
+    def test_full_countdown_when_entering_on_time(self):
+        # 提前量 = 倒计时时长，6 秒后正好走到记录点
+        self.assertEqual(get_outro_countdown_seconds(6, 94, 100, 1000), 6)
+
+    def test_late_entry_shrinks_to_trigger(self):
+        # 拖进度等原因晚进入：按到记录点的剩余距离缩短，结束点不变
+        self.assertEqual(get_outro_countdown_seconds(6, 98, 100, 1000), 2)
+
+    def test_past_trigger_uses_one_second(self):
+        self.assertEqual(get_outro_countdown_seconds(6, 101, 100, 1000), 1)
+
+    def test_never_runs_past_video_end(self):
+        # 记录点就在结尾：倒计时必须留 1 秒余量
+        self.assertEqual(get_outro_countdown_seconds(6, 97, 100, 100), 2)
+
+    def test_zero_config_falls_back_to_one_second(self):
+        self.assertEqual(get_outro_countdown_seconds(0, 94, 100, 1000), 1)
+
+
 class ClearPointTest(unittest.TestCase):
 
     def test_clear_only_removes_episode_override(self):
@@ -141,6 +165,24 @@ class ClearPointTest(unittest.TestCase):
         data = {"280": {"title": "Show", "seasons": {"1": {"episodes": {}}}}}
         prune_skip_record(data, "280")
         self.assertNotIn("280", data)
+
+
+class DeleteAllReloadTest(unittest.TestCase):
+
+    def test_delete_all_requests_service_reload(self):
+        properties = {}
+
+        class FakeWindow:
+            def __init__(self, _window_id):
+                pass
+
+            def setProperty(self, key, value):
+                properties[key] = value
+
+        with mock.patch.object(common.xbmcgui, "Window", FakeWindow):
+            common.delete_all_skip_points()
+
+        self.assertEqual(properties.get("MFG.Reload"), "true")
 
 
 class CopySafetyTest(unittest.TestCase):

@@ -69,5 +69,64 @@ class EmbyMarkersTest(unittest.TestCase):
         self.assertEqual(server_id_from_db("emby_abc123.db"), "abc123")
 
 
+class StrictFallbackTest(unittest.TestCase):
+    """文件名兜底必须严格：通用名/歧义结果不能误匹配。"""
+
+    def _find(self, rows, playing_file, kodi_id=0, episodes=()):
+        db = make_db(rows=rows, episodes=episodes)
+        try:
+            return find_markers(playing_file, kodi_id, db_paths=[db])
+        finally:
+            os.unlink(db)
+
+    def test_generic_video_name_is_rejected(self):
+        rows = [
+            ("100", "m1", "ShowA.S01E01", "http://host/115/url/video.mkv?pickcode=a",
+             100, 0, 0, 1000),
+            ("101", "m2", "ShowB.S01E02", "http://host/115/url/video.mkv?pickcode=b",
+             100, 0, 0, 2000),
+        ]
+        self.assertIsNone(self._find(
+            rows, "http://host/115/url/video.mkv?pickcode=c"
+        ))
+
+    def test_name_fallback_matches_media_extension_stem(self):
+        rows = [
+            ("100", "m1", "The.Message.S01E01.2160p.NF.WEB-DL.AAC.2.0.H.265-BlackTV",
+             "smb://nas/The.Message.S01E01.2160p.NF.WEB-DL.AAC.2.0.H.265-BlackTV.mkv",
+             100, 0, 0, 2380),
+        ]
+        result = self._find(
+            rows,
+            "smb://other/The.Message.S01E01.2160p.NF.WEB-DL.AAC.2.0.H.265-BlackTV.mkv",
+        )
+        self.assertIsNotNone(result)
+        self.assertEqual(result["credits_start"], 2380)
+
+    def test_ambiguous_filename_is_rejected(self):
+        rows = [
+            ("100", "m1", "Show.S01E01", "smb://nas/a.mkv", 100, 0, 0, 1000),
+            ("101", "m2", "Show.S01E01", "smb://nas/b.mkv", 100, 0, 0, 2000),
+        ]
+        self.assertIsNone(self._find(rows, "smb://other/Show.S01E01.mkv"))
+
+    def test_exact_path_without_markers_stops_fallback(self):
+        rows = [
+            ("100", "m1", "Show.S01E01", "smb://nas/Show.S01E01.mkv", 100, 0, 0, 0),
+            ("101", "m2", "Show.S01E01", "smb://other/Show.S01E01.mkv", 100, 0, 0, 500),
+        ]
+        # 精确路径命中第 1 行但没有标记：应停止，而不是拿同名文件的第 2 行标记
+        self.assertIsNone(self._find(rows, "smb://nas/Show.S01E01.mkv"))
+
+    def test_kodi_id_without_markers_stops_fallback(self):
+        rows = [
+            ("100", "m1", "Show.S01E01", "smb://nas/a.mkv", 100, 0, 0, 0),
+            ("101", "m2", "Show.S01E01", "smb://nas/b.mkv", 100, 0, 0, 500),
+        ]
+        self.assertIsNone(self._find(
+            rows, "", kodi_id=6011, episodes=[("100", 6011)]
+        ))
+
+
 if __name__ == "__main__":
     unittest.main()

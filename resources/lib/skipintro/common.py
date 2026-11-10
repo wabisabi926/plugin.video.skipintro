@@ -46,6 +46,7 @@ SKIP_THRESHOLD_OUTRO = 80
 
 # Countdown configuration
 COUNTDOWN_SECONDS = 6
+# 回退到片尾区外多远才重置倒计时；倒计时提前量大于它时以提前量为准
 OUTRO_RESET_BUFFER = 6
 # 片尾区内记录/修改片尾点后，先等通知播完再启动倒计时（上限秒数）
 OUTRO_NOTIFICATION_WAIT = 3.0
@@ -557,6 +558,28 @@ def get_outro_trigger(record: Any, season: Any, episode: Any, total_time: Any,
     return 0.0, "none"
 
 
+def get_outro_countdown_seconds(configured: Any, current: Any, trigger: Any,
+                                total: Any) -> float:
+    """片尾倒计时的实际秒数：从当前位置走到触发点所需的时间。
+
+    正常在触发点前「设置时长」秒进入倒计时，结束时正好到触发点；
+    进入较晚（拖动进度、等待记录通知）时按剩余距离缩短。距离视频结尾
+    不足时再压到「剩余时长 - 1 秒」，保证倒计时能在片尾内走完。
+    返回值至少 1 秒，避免显示 0 秒。
+    """
+    remaining = max(1.0, _to_seconds(configured))
+    current = _to_seconds(current)
+    trigger = _to_seconds(trigger)
+    total = _to_seconds(total)
+    if trigger > current:
+        remaining = min(remaining, trigger - current)
+    else:
+        remaining = 1.0
+    if total > current:
+        remaining = min(remaining, total - current - 1.0)
+    return max(1.0, remaining)
+
+
 def set_skip_point(record: Dict[str, Any], season: Any, episode: Any, key: str,
                    value: Any) -> str:
     """写入记录点，返回写入层级 season / episode / unknown / none。
@@ -928,6 +951,11 @@ def delete_all_skip_points() -> None:
     if os.path.exists(SKIP_DATA_FILE):
         os.remove(SKIP_DATA_FILE)
     _set_cached_data('skip_data', {})
+    # 通知 service 重新加载，清掉当前播放已经算好的片尾触发点/倒计时
+    try:
+        xbmcgui.Window(10000).setProperty("MFG.Reload", "true")
+    except Exception as e:
+        log(f"Failed to notify service after deleting all points: {e}", xbmc.LOGWARNING)
 
 
 class State:
