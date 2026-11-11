@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.4.8-blue.svg)](https://github.com/wabisabi926/plugin.video.skipintro)
+[![Version](https://img.shields.io/badge/version-1.4.9-blue.svg)](https://github.com/wabisabi926/plugin.video.skipintro)
 [![License](https://img.shields.io/badge/license-NC--3.0-green.svg)](LICENSE.txt)
 [![Platform](https://img.shields.io/badge/platform-Kodi-orange.svg)](https://kodi.tv/)
 
@@ -14,6 +14,7 @@
 
 - ✅ **自动跳过片头片尾**：首次记录后，自动跳过片头片尾
 - ✅ **自动读取 Emby 标记**：Emby for Kodi 已有片头/片尾标记时无需手动记录
+- ✅ **Emby 片头开始点**：Emby 同时提供片头开始/结束点时，保留片头前的冷开场或前情，播到片头开始再跳过；手动记录不受影响
 - ✅ **一季只记一次**：每季第一次记录成为整季默认值，并立即覆盖当前集；之后单独记录某一集只影响那一集
 - ✅ **智能自动播放**：片尾点前开始倒计时，到点自动播放下一集，倒计时时长可调（默认 6 秒）
 - ✅ **支持三种模式**：播放列表模式（最高优先级）→ 媒体库模式 → 文件夹播放模式
@@ -117,6 +118,7 @@
 - 倒计时结束时正好到片尾点，自动播放下一集
 - 倒计时期间可按“返回键”取消跳过片尾
 - 进入倒计时较晚（拖动进度、等待记录通知）时，倒计时会按到片尾点的剩余距离缩短；片尾点距视频结尾不足时也会缩短，保证能在片尾内走完并跳转
+- Emby 同时提供片头开始点（`IntroStart`）和结束点（`IntroEnd`），且开始点大于 5 秒时，起播会先保留片头前的冷开场或前情，播到片头开始再跳到片头结束；手动记录和季标记没有开始点，仍按起播直接跳到片头结束处理
 
 ### 4.3 一季只记一次，个别集可单独覆盖
 
@@ -136,6 +138,8 @@
 ```
 本集标记  >  Emby 标记  >  整季标记  >  不跳过
 ```
+
+> Emby 的片头开始点（`IntroStart`）只在来源为 Emby 时生效；本集/整季手动标记仍只有片头结束点。
 
 ### 4.4 删除/修改记录
 
@@ -330,6 +334,12 @@ addon_data/plugin.video.skipintro/skip_intro_data.json
 ---
 
 ## 更新日志
+
+### v1.4.9 (2026-11)
+- ✨ **Emby 片头开始点**：Emby 同时提供 `IntroStart` / `IntroEnd` 且开始点大于 5 秒时，起播保留冷开场或前情，播到片头开始再跳到片头结束
+- ⚖️ **手动/季标记不变**：手动记录仍然只记片头结束点，起播直接跳到片头结束；开始点只对 Emby 来源生效
+- 🐛 **只跳一次**：跳过后拖回片头不会重复跳过；播放中拖过片头结束会取消等待
+- ✅ 新增片头区间、阈值、来源优先级与等待/跳过/取消判断的单元测试
 
 ### v1.4.8 (2026-11)
 - ⚖️ **首次记录立即生效**：第一次记录同时写整季默认值和当前集本集标记，当前集立即压过 Emby；其他集仍按 本集 > Emby > 整季 的优先级

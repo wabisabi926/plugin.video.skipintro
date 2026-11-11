@@ -44,6 +44,10 @@ NOTIFICATION_DURATION_LONG = 5000
 SKIP_THRESHOLD_INTRO = 20
 SKIP_THRESHOLD_OUTRO = 80
 
+# Emby 片头开始点：太靠前或片头区间过短时不值得等待，直接按现有逻辑跳到片头结束
+INTRO_START_MIN_SECONDS = 5.0
+INTRO_MIN_RANGE_SECONDS = 5.0
+
 # Countdown configuration
 COUNTDOWN_SECONDS = 6
 # 回退到片尾区外多远才重置倒计时；倒计时提前量大于它时以提前量为准
@@ -530,6 +534,47 @@ def get_skip_point(record: Any, season: Any, episode: Any, key: str,
     if key in season_data:
         return _to_seconds(season_data.get(key)), "season"
     return 0.0, "none"
+
+
+def get_intro_range(record: Any, season: Any, episode: Any,
+                    auto_start: Any = 0, auto_end: Any = 0) -> Tuple[float, float, str]:
+    """片头区间 (start, end, source)。
+
+    start 只对 Emby 自动记录点（source=auto）生效；手动/季标记没有开始点，
+    start 恒为 0，保持“起播直接跳到片头结束”的原有行为。
+    start 太靠前或片头区间过短时也按 0 处理，避免为了几秒空等。
+    """
+    end, source = get_skip_point(record, season, episode, "intro", auto_end)
+
+    start = 0.0
+    if source == "auto":
+        start = _to_seconds(auto_start)
+        if start < INTRO_START_MIN_SECONDS or start > end - INTRO_MIN_RANGE_SECONDS:
+            start = 0.0
+
+    return start, end, source
+
+
+def resolve_intro_decision(current: Any, start: Any, end: Any,
+                           total: Any) -> str:
+    """当前播放位置应如何处理片头：wait / skip / none。"""
+    current = _to_seconds(current)
+    start = _to_seconds(start)
+    end = _to_seconds(end)
+    total = _to_seconds(total)
+
+    if end <= 0:
+        return "none"
+    # 坏标记：片头结束点已经贴到视频结尾，跳过去等于直接结束本集
+    if total > 0 and end >= total - 1:
+        return "none"
+    if current >= end:
+        return "none"
+    if start >= end:
+        start = 0.0
+    if start > 0 and current < start:
+        return "wait"
+    return "skip"
 
 
 def get_outro_trigger(record: Any, season: Any, episode: Any, total_time: Any,

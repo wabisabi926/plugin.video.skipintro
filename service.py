@@ -19,7 +19,8 @@ from skipintro.common import (
     OUTRO_RESET_BUFFER, notification_max_wait,
     MAIN_LOOP_INTERVAL,
     NOTIFICATION_DURATION_LONG,
-    get_skip_point, get_outro_trigger, get_outro_countdown_seconds,
+    get_skip_point, get_intro_range, resolve_intro_decision,
+    get_outro_trigger, get_outro_countdown_seconds,
 )
 from skipintro.media import (
     get_current_tvshow_info, get_next_episode_from_library,
@@ -124,6 +125,13 @@ class PlayerMonitor(xbmc.Player):
         self.state: State = State()
         self.emby_markers: Optional[dict] = None
         self._emby_retry_done: bool = False
+        self.intro_start: float = 0.0
+        self.intro_end: float = 0.0
+        self.intro_pending: bool = False
+        self.intro_skip_done: bool = False
+        self._intro_season_num: int = 0
+        self._intro_episode_num: int = 0
+        self._intro_source: str = "none"
         self._outro_lock = threading.Lock()
         self._cached_playing_state: Optional[bool] = None
         self._state_cache_time: float = 0
@@ -140,13 +148,22 @@ class PlayerMonitor(xbmc.Player):
                 self._cached_playing_state = False
         return self._cached_playing_state or False
 
+    def _reset_intro_state(self) -> None:
+        self.intro_start = 0.0
+        self.intro_end = 0.0
+        self.intro_pending = False
+        self.intro_skip_done = False
+        self._intro_source = "none"
+
     def onAVStarted(self):
         self.cancel_skip = False
         self.state.playing_next = False
+        self.state.pause = False
         self.current_outro_time = None
         self.outro_triggered = False
         self.pending_outro_deadline = None
         self.await_notification_until = None
+        self._reset_intro_state()
         # 上一集的播放状态缓存不能带进新一集，否则会算错单集覆盖
         invalidate_playlist_state_cache()
         self._emby_retry_done = False
@@ -202,12 +219,14 @@ class PlayerMonitor(xbmc.Player):
             self.current_outro_time = None
             self.outro_triggered = False
         self.emby_markers = None
+        self._reset_intro_state()
 
     def onPlayBackStopped(self):
         self.state.reset()
         self.current_outro_time = None
         self.outro_triggered = False
         self.emby_markers = None
+        self._reset_intro_state()
 
     def onPlayBackPaused(self):
         self.state.pause = True
@@ -273,6 +292,8 @@ class PlayerMonitor(xbmc.Player):
             self.outro_triggered = False
 
     def check_intro(self) -> None:
+        if self.intro_skip_done:
+            return
         if not self.is_video_playing():
             return
 
@@ -285,35 +306,82 @@ class PlayerMonitor(xbmc.Player):
         record = data.get(tvshow_id) or {}
         season_num, episode_num = get_season_episode_from_state(source_type, state, season)
         lookup_episode = get_current_episode_number(source_type, season, state)
+        emby_intro_start = (self.emby_markers or {}).get("intro_start") or 0
         emby_intro_end = (self.emby_markers or {}).get("intro_end") or 0
 
-        # 优先级：本集覆盖 > Emby 记录点 > 季基准
-        skip_time, source = get_skip_point(
-            record, season, lookup_episode, "intro", emby_intro_end
+        # 开始点只对 Emby 来源生效；手动/季标记仍只有片头结束点
+        start, end, source = get_intro_range(
+            record, season, lookup_episode, emby_intro_start, emby_intro_end
         )
-        log_debug(f"Intro skip target {skip_time} (source={source}) for S{season_num}E{episode_num}")
-        if skip_time <= 0:
+        self.intro_start = start
+        self.intro_end = end
+        self._intro_season_num = season_num
+        self._intro_episode_num = episode_num
+        self._intro_source = source
+        self.intro_pending = False
+
+        if end <= 0:
+            log_debug(f"No intro marker for {show_title} S{season_num}E{episode_num}")
             return
+
         try:
             current_time = self.getTime()
             total_time = self.getTotalTime()
-            # 坏标记（Emby 异常、跨版本季标记）可能超过当前集时长，避免直接跳到结尾
-            if total_time > 0 and skip_time >= total_time - 1:
-                log(
-                    f"Intro skip target {skip_time:.0f}s ignored: "
-                    f"episode only {total_time:.0f}s (source={source})",
-                    xbmc.LOGWARNING,
-                )
-                return
-            if current_time < skip_time:
-                log_debug(f"Auto skipping intro for {show_title} S{season}. Current: {current_time}, Target: {skip_time}")
-                self.seekTime(skip_time)
-
-                if SETTINGS.notify_intro_skip:
-                    notification_text = SETTINGS.get_string(32000) % (season_num, episode_num)
-                    show_notification(notification_text)
+            action = resolve_intro_decision(current_time, start, end, total_time)
+            log_debug(
+                f"Intro range {start:.1f}-{end:.1f} (source={source}) "
+                f"current={current_time:.1f} action={action} for S{season_num}E{episode_num}"
+            )
+            if action == "wait":
+                self.intro_pending = True
+            elif action == "skip":
+                self._skip_intro()
         except Exception as e:
-            log(f"Error during skip: {e}", xbmc.LOGERROR)
+            log(f"Error during intro check: {e}", xbmc.LOGERROR)
+
+    def _skip_intro(self) -> None:
+        if self.intro_skip_done:
+            return
+        try:
+            self.seekTime(self.intro_end)
+        except Exception as e:
+            self.intro_pending = False
+            log(f"Error during intro skip: {e}", xbmc.LOGERROR)
+            return
+
+        self.intro_pending = False
+        self.intro_skip_done = True
+        log_debug(
+            f"Auto skipping intro (source={self._intro_source}) "
+            f"to {self.intro_end:.1f}s for S{self._intro_season_num}E{self._intro_episode_num}"
+        )
+        if SETTINGS.notify_intro_skip:
+            notification_text = SETTINGS.get_string(32000) % (
+                self._intro_season_num, self._intro_episode_num
+            )
+            show_notification(notification_text)
+
+    def check_pending_intro(self) -> None:
+        if not self.intro_pending or self.intro_skip_done:
+            return
+        if self.state.pause or not self.is_video_playing():
+            return
+
+        try:
+            current_time = self.getTime()
+            total_time = self.getTotalTime()
+            action = resolve_intro_decision(
+                current_time, self.intro_start, self.intro_end, total_time
+            )
+        except Exception as e:
+            log(f"Error during pending intro check: {e}", xbmc.LOGERROR)
+            return
+
+        if action == "skip":
+            self._skip_intro()
+        elif action == "none":
+            self.intro_pending = False
+            log_debug("Pending intro canceled: current position past intro end")
 
 
 def create_countdown_window() -> Tuple[Optional[SkipCountdownWindow], Optional[threading.Thread]]:
@@ -557,12 +625,17 @@ if __name__ == '__main__':
         if xbmcgui.Window(10000).getProperty("MFG.Reload") == "true":
             xbmcgui.Window(10000).clearProperty("MFG.Reload")
             player.update_outro_info()
+            if not player.intro_skip_done:
+                player.check_intro()
             if countdown_state.active:
                 countdown_state.cleanup()
             # 记录/修改跳过点后：重置等待窗口，并等 default.py 弹出的记录通知出现并消失
             # （service 与 default.py 是不同进程，通知可能晚于 MFG.Reload 出现）
             player.pending_outro_deadline = None
             player.await_notification_until = time.time() + notification_max_wait()
+
+        if player.intro_pending:
+            player.check_pending_intro()
 
         if player.is_video_playing() and player.current_outro_time:
             try:

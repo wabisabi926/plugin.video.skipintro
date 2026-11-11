@@ -8,10 +8,12 @@ import skipintro.common as common
 from skipintro.common import (
     _parse_season_data,
     clear_skip_point,
+    get_intro_range,
     get_outro_countdown_seconds,
     get_outro_trigger,
     get_skip_point,
     prune_skip_record,
+    resolve_intro_decision,
     set_skip_point,
 )
 
@@ -110,6 +112,101 @@ class ResolveIntroTest(unittest.TestCase):
         self.assertEqual(get_skip_point(record, "1", 1, "intro", 200), (100.0, "episode"))
         # 其他集仍优先使用 Emby
         self.assertEqual(get_skip_point(record, "1", 2, "intro", 200), (200.0, "auto"))
+
+
+class IntroRangeTest(unittest.TestCase):
+    """Emby 开始点只在 source=auto 时生效；手动/季标记保持结束点语义。"""
+
+    def test_emby_start_and_end_used(self):
+        self.assertEqual(get_intro_range({}, "1", 2, 30, 100), (30.0, 100.0, "auto"))
+
+    def test_emby_start_zero_skips_from_beginning(self):
+        self.assertEqual(get_intro_range({}, "1", 2, 0, 100), (0.0, 100.0, "auto"))
+
+    def test_emby_start_below_threshold_ignored(self):
+        self.assertEqual(get_intro_range({}, "1", 2, 3, 100), (0.0, 100.0, "auto"))
+
+    def test_emby_start_at_threshold_kept(self):
+        self.assertEqual(get_intro_range({}, "1", 2, 5, 100), (5.0, 100.0, "auto"))
+
+    def test_emby_start_ge_end_ignored(self):
+        self.assertEqual(get_intro_range({}, "1", 2, 100, 100), (0.0, 100.0, "auto"))
+
+    def test_emby_short_range_ignores_start(self):
+        self.assertEqual(get_intro_range({}, "1", 2, 96, 100), (0.0, 100.0, "auto"))
+
+    def test_episode_override_disables_emby_start(self):
+        record = make_record()
+        set_skip_point(record, "1", 1, "intro", 80)
+        set_skip_point(record, "1", 2, "intro", 90)
+        self.assertEqual(
+            get_intro_range(record, "1", 2, 30, 100), (0.0, 90.0, "episode")
+        )
+
+    def test_season_marker_has_no_start(self):
+        record = make_record()
+        set_skip_point(record, "1", 1, "intro", 80)
+        self.assertEqual(get_intro_range(record, "1", 2, 0, 0), (0.0, 80.0, "season"))
+
+    def test_explicit_zero_episode_disables(self):
+        record = make_record()
+        set_skip_point(record, "1", 1, "intro", 80)
+        set_skip_point(record, "1", 2, "intro", 0)
+        self.assertEqual(
+            get_intro_range(record, "1", 2, 30, 100), (0.0, 0.0, "episode")
+        )
+
+    def test_emby_without_end_falls_back_to_season(self):
+        record = make_record()
+        set_skip_point(record, "1", 1, "intro", 80)
+        self.assertEqual(get_intro_range(record, "1", 2, 30, 0), (0.0, 80.0, "season"))
+
+    def test_legacy_season_number_has_no_start(self):
+        self.assertEqual(
+            get_intro_range({"seasons": {"1": 95}}, "1", 1, 0, 0),
+            (0.0, 95.0, "season"),
+        )
+
+    def test_legacy_time_has_no_start(self):
+        self.assertEqual(
+            get_intro_range({"time": 80}, "1", 1, 0, 0),
+            (0.0, 80.0, "legacy"),
+        )
+
+
+class IntroDecisionTest(unittest.TestCase):
+    """起播/等待/取消的纯判断。"""
+
+    def test_before_start_waits(self):
+        self.assertEqual(resolve_intro_decision(10, 30, 100, 2700), "wait")
+
+    def test_at_start_skips(self):
+        self.assertEqual(resolve_intro_decision(30, 30, 100, 2700), "skip")
+
+    def test_inside_intro_skips(self):
+        self.assertEqual(resolve_intro_decision(50, 30, 100, 2700), "skip")
+
+    def test_after_end_none(self):
+        self.assertEqual(resolve_intro_decision(100, 30, 100, 2700), "none")
+
+    def test_end_past_total_none(self):
+        self.assertEqual(resolve_intro_decision(10, 30, 100, 100), "none")
+
+    def test_no_start_skips_immediately(self):
+        self.assertEqual(resolve_intro_decision(0, 0, 100, 2700), "skip")
+
+    def test_zero_end_none(self):
+        self.assertEqual(resolve_intro_decision(0, 0, 0, 2700), "none")
+
+    def test_unknown_total_still_skips(self):
+        self.assertEqual(resolve_intro_decision(0, 0, 100, 0), "skip")
+
+    def test_negative_current_clamped(self):
+        self.assertEqual(resolve_intro_decision(-5, 30, 100, 2700), "wait")
+
+    def test_invalid_start_range_skips_to_end(self):
+        # 防御性：start >= end 时不能永远 wait
+        self.assertEqual(resolve_intro_decision(0, 100, 100, 2700), "skip")
 
 
 class ResolveOutroTest(unittest.TestCase):
